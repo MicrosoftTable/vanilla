@@ -87,7 +87,7 @@ trait Assets {
             'PantsTemplate',
             'Graphic',
             'Image',
-            'ColorMap'
+            'ColorMap', 'BaseTextureId', 'OverlayTextureId'
         ];
         $walk = function ($x, $d) use (&$walk, &$out, $keys) {
             if ($d > 12 || count($out) > 24) {
@@ -95,6 +95,10 @@ trait Assets {
             }
             foreach ($keys as $k) {
                 $v = $x->props[$k] ?? null;
+                if ($x->cls === 'CharacterMesh' && (is_int($v) || is_string($v) || (is_float($v) && is_finite($v) && $v === floor($v)))) {
+                    $id = self::parseId($v);
+                    if ($id) { $out[$id] = $id; }
+                }
                 if (is_array($v) && isset($v['url'])) {
                     $id = self::assetId($v['url']);
                     if ($id) {

@@ -57,7 +57,7 @@ trait LookBuilder {
         19 => ['Head', 'facefront']
     ];
 
-    private static function partCFs(bool $raised): array {
+    private static function partCFs(bool $raised, float $shoulderAngle = M_PI / 2): array {
         $torso = self::CF([0, 3, 0]);
         $cfs = [
             'Torso' => $torso,
@@ -69,7 +69,7 @@ trait LookBuilder {
         ];
         if ($raised) {
             $cfs['Right Arm'] = self::cfMul(
-                self::cfMul(self::cfMul($torso, self::SHOULDER_R()), self::CF([0, 0, 0], self::rotZ(M_PI / 2))),
+                self::cfMul(self::cfMul($torso, self::SHOULDER_R()), self::CF([0, 0, 0], self::rotZ($shoulderAngle))),
                 self::cfInv(self::SHOULDER_R1())
             );
         }
@@ -214,6 +214,13 @@ trait LookBuilder {
     }
 
     private function buildHandleDrawable(Inst $h, array $cf, array &$notes): ?array {
+        if ($this->renderer === '2016') {
+            foreach ($h->children as $effect) {
+                if ($effect->cls === 'ParticleEmitter') {
+                    $notes[] = '2016: custom ParticleEmitter curves are not supported yet';
+                }
+            }
+        }
         $sm = null;
         foreach ($h->children as $c) {
             if (in_array($c->cls, ['SpecialMesh', 'FileMesh', 'BlockMesh'], true)) {
@@ -222,7 +229,7 @@ trait LookBuilder {
             }
         }
         $size = self::partSize($h);
-        $item = ['cf' => $cf, 'size' => $size, 'color' => self::partColor($h), 'tint' => [1, 1, 1], 'scale' => [1, 1, 1], 'off' => [0, 0, 0], 'fitTo' => null,
+        $item = ['material' => $h->props['Material'] ?? 256, 'cf' => $cf, 'size' => $size, 'color' => self::partColor($h), 'tint' => [1, 1, 1], 'scale' => [1, 1, 1], 'off' => [0, 0, 0], 'fitTo' => null,
             'fx' => array_values(array_filter($h->children, function ($c) {
             return in_array($c->cls, ['Fire', 'Smoke', 'Sparkles'], true);
         }))];
@@ -263,11 +270,13 @@ trait LookBuilder {
                     ) || $h->cls === 'MeshPart'
                 )
             ) {
-                $b = $this->bytes($meshUrl);
-                if ($b === null) {
-                    throw new \RuntimeException('a mesh could not be fetched');
+                if ($this->renderer === '2016') {
+                    $m = $this->loadMesh2016($meshUrl);
+                } else {
+                    $b = $this->bytes($meshUrl);
+                    if ($b === null) { throw new \RuntimeException('a mesh could not be fetched'); }
+                    $m = self::cleanMesh(self::parseMesh($b));
                 }
-                $m = self::cleanMesh(self::parseMesh($b));
             } elseif ((is_numeric($type) && (int)$type === 0)
                 || (is_string($type) && strcasecmp($type, 'Head') === 0)) {
                 $m = $this->base()['headRaw'];
@@ -327,7 +336,7 @@ trait LookBuilder {
 
     private static function emptyLook(): array {
         return ['colors' => ['head' => self::brick(24), 'torso' => self::brick(23), 'leftArm' => self::brick(24), 'rightArm' => self::brick(24), 'leftLeg' => self::brick(119), 'rightLeg' => self::brick(119)],
-            'shirt' => null, 'pants' => null, 'tshirt' => null, 'face' => null, 'faceSet' => false, 'accessories' => [], 'tool' => null, 'notes' => []];
+            'headMesh' => null, 'bodyMeshes' => [], 'shirt' => null, 'pants' => null, 'tshirt' => null, 'face' => null, 'faceSet' => false, 'accessories' => [], 'tool' => null, 'notes' => []];
     }
 
     private function absorbTree(array &$look, array $tree, string $tag): void {
@@ -348,7 +357,14 @@ trait LookBuilder {
             }
             foreach ($list as $x) {
                 $P = $x->props;
-                if ($x->cls === 'Shirt') {
+                if ($this->renderer === '2016' && $x->cls === 'CharacterMesh') {
+                    $names = [1 => 'torso', 2 => 'leftArm', 3 => 'rightArm', 4 => 'leftLeg', 5 => 'rightLeg',
+                        'Torso' => 'torso', 'LeftArm' => 'leftArm', 'RightArm' => 'rightArm', 'LeftLeg' => 'leftLeg', 'RightLeg' => 'rightLeg'];
+                    $key = $names[$P['BodyPart'] ?? 0] ?? null;
+                    if ($key) { $look['bodyMeshes'][$key] = $x; }
+                } elseif ($this->renderer === '2016' && in_array($x->cls, ['SpecialMesh', 'CylinderMesh', 'BlockMesh', 'FileMesh'], true)) {
+                    $look['headMesh'] = $x;
+                } elseif ($x->cls === 'Shirt') {
                     $im = $template($this->image($P['ShirtTemplate']['url'] ?? null), 'shirt');
                     if ($im) {
                         $look['shirt'] = $im;

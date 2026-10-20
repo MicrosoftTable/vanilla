@@ -5,13 +5,13 @@ foreach (['BrickColors', 'Net', 'Inst', 'Rbxm', 'Img', 'PngStream', 'Texture', '
     require_once __DIR__ . '/' . $file . '.php';
 }
 
-foreach (['Geometry', 'Assets', 'Meshes', 'LookBuilder', 'Particles', 'Scene', 'FastRaster', 'ReferenceRaster'] as $part) {
+foreach (['RenderProfiles', 'Character2016', 'Particles2016', 'Geometry', 'Assets', 'Meshes', 'LookBuilder', 'Particles', 'Scene', 'FastRaster', 'ReferenceRaster'] as $part) {
     require_once __DIR__ . '/parts/' . $part . '.php';
 }
 
 // vanilla is a software renderer in plain php with no gpu and no webgl and no rcc
 final class Avatar {
-    use Geometry, Assets, Meshes, LookBuilder, Particles, Scene, FastRaster, ReferenceRaster;
+    use RenderProfiles, Character2016, Particles2016, Geometry, Assets, Meshes, LookBuilder, Particles, Scene, FastRaster, ReferenceRaster;
 
     const TPL_W = 585, TPL_H = 559;
     // where each face of each body part sits on the 585x559 clothing template: x, y, width, height
@@ -54,6 +54,7 @@ final class Avatar {
         '100x100' => [100, 100],
         '352x352' => [352, 352],
         '420x420' => [420, 420],
+        '512x512' => [512, 512],
         '150x150' => [150, 150],
         '48x48' => [48, 48]
     ];
@@ -83,6 +84,8 @@ final class Avatar {
         $this->fetcher = $opts['fetcher'] ?? null;
         $this->subpixelBits = max(0, min(12, (int)($opts['subpixelBits'] ?? 8)));
         $this->exact = !empty($opts['exact']);
+        $this->defaultRenderer = self::validateRenderer($opts['renderer'] ?? '2012');
+        $this->selectRenderer($this->defaultRenderer);
     }
 
     private function base(): array {
@@ -116,6 +119,7 @@ final class Avatar {
     }
 
     function render(array $req): array {
+        $this->selectRenderer($req['renderer'] ?? $this->defaultRenderer);
         if (isset($req['charapp'])) {
             if (!empty($req['ids'])) {
                 throw new \InvalidArgumentException('use charapp or ids and not both');

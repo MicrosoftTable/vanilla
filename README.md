@@ -5,7 +5,7 @@
 <h1 align="center">vanilla</h1>
 
 <p align="center">
-  2012 style roblox avatar renders in plain php
+  2012 style roblox avatar renders in plain php, with an experimental 2016 mode
 </p>
 
 <p align="center">
@@ -28,7 +28,7 @@ vanilla doesn't use any of that. there's no soap, no lua and no windows box, you
 
 ## setup
 
-needs php 7.4+ with gd, curl and zlib.
+needs php 7.4+ with gd, curl and zlib. Allow 256 MB PHP memory for large 2016 renders; `avatar.php` already requests this limit. Direct PHP callers should configure the same limit.
 
 1. put the folder on your server
 2. set `assetBase` in `config.php` to your asset host (the id gets added to the end)
@@ -63,8 +63,9 @@ avatar.php?ids=1234,5678&colors=f5cd30,0d69ac,f5cd30,f5cd30,a4bd47,a4bd47&size=1
 | `charapp` | the charapp link (or the list itself). use this or `ids`, not both |
 | `ids` | up to 12 asset ids (shirts, pants, t-shirts, faces, hats, gear) |
 | `colors` | head, torso, left arm, right arm, left leg, right leg as `rrggbb` |
-| `size` | `150x200` (default), `180x220`, `100x100`, `352x352`, `420x420`, `150x150`, `48x48`. `x` and `y` work too |
+| `size` | `150x200` (default), `180x220`, `100x100`, `352x352`, `420x420`, `512x512`, `150x150`, `48x48`. `x` and `y` work too |
 | `view` | `body` (default) or `head` for a headshot |
+| `renderer` | `2012` (default) or experimental `2016`; separate lighting, material highlights, and legacy particle effects |
 | `smooth` | `1` (default) or `0` for hard edges |
 | `sid` | 16 to 32 hex chars. a new render with the same sid deletes the previous one |
 
@@ -76,6 +77,30 @@ $r = (new Vanilla\Avatar(['assetBase' => 'https://your.host/asset/?id=', 'cacheD
     ->render(['charapp' => 'https://your.host/charapp', 'size' => '150x200']);
 file_put_contents('thumb.png', $r['png']);
 ```
+
+## 2016 rendering option
+
+Append `&renderer=2016` to an existing render URL:
+
+```
+avatar.php?ids=1234,5678&size=420x420&renderer=2016
+```
+
+Use `renderer=2012` for the existing appearance. You can also set `renderer` in
+`config.php` (or `config.local.php`) to change the endpoint default. Both modes
+share the same assets and request parameters; their PNG caches and ETags are separate.
+In PHP, pass `'renderer' => '2016'` to `render()` or to the `Avatar` constructor.
+A per-request choice only affects that request.
+
+The experimental mode uses source-derived 2016 default lighting, per-material
+specular values, and layered Fire/Smoke/Sparkles with original 2016 textures.
+Lighting rotates the sun into the avatar coordinate frame and evaluates HQ highlights per pixel.
+It also uses the source avatar script's uncropped body camera, native binary mesh
+UVs and clothing atlas, no body studs, and the original head face UVs. R6 package
+body meshes and legacy/file-mesh heads can replace default parts.
+It is **not verified as a 1:1 2016 RCCService replacement**. See [source notes and remaining gaps](docs/2016-renderer.md).
+
+Run the offline checks with `php tests/renderers.php`, `php tests/geometry2016.php`, and `php tests/lighting2016.php`.
 
 ## switching from rccservice to vanilla
 

@@ -182,8 +182,8 @@ trait Particles {
     ): void {
         $snap = 1 << $this->subpixelBits;
         foreach ($sys['parts'] as $p) {
-            $hw = $p['w'] / 2;
-            $hh = $p['h'] / 2;
+            $hw = $p['w'] / (isset($sys['fx2016']) ? 1 : 2);
+            $hh = $p['h'] / (isset($sys['fx2016']) ? 1 : 2);
             if (!($hw > 0 && $hh > 0)) {
                 continue;
             }
@@ -261,6 +261,7 @@ trait Particles {
                     'bx0' => max(0, (int)ceil(min($x0, $x1, $x2) - 0.5)), 'bx1' => min($Wss - 1, (int)floor(max($x0, $x1, $x2) - 0.5)),
                     'by0' => max(0, (int)ceil(min($y0, $y1, $y2) - 0.5)), 'by1' => min($Hss - 1, (int)floor(max($y0, $y1, $y2) - 0.5)),
                     'e' => [$a0, $b0, $c0, $a1, $b1, $c1], 'P' => $P, 'mode' => 4, 'color' => $p['col'], 'tex' => $tex, 'studs' => false, 'half' => null, 'tint' => null, 'mat' => $sys['mat'],
+                    'fx2016' => $sys['fx2016'] ?? null, 'curve' => $p['curve'] ?? null,
                 ];
             }
         }

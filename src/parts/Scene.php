@@ -3,14 +3,15 @@ namespace Vanilla;
 
 // camera lighting and the draw calls for one look
 trait Scene {
-    private function draw(array $look, int $W, int $H, int $SS, string $view = 'body'): string {
+    private function draw(array &$look, int $W, int $H, int $SS, string $view = 'body'): string {
         $base = $this->base();
-        $cfs = self::partCFs((bool)$look['tool']);
+        if ($this->renderer === '2016') { $base = $this->characterBase2016($base, $look); }
+        $cfs = self::partCFs((bool)$look['tool'], $this->renderer === '2016' ? 1.57 : M_PI / 2);
         $items = [];
         foreach ($look['accessories'] as $acc) {
             $h = self::handleOf($acc);
             if ($h) {
-                $it = $this->buildHandleDrawable($h, self::accessoryCF($acc, $h, $cfs), $look['notes']);
+                $it = $this->buildHandleDrawable($h, $this->accessoryFrame($acc, $h, $cfs), $look['notes']);
                 if ($it) {
                     $items[] = $it;
                 }
@@ -47,7 +48,10 @@ trait Scene {
                 ($vp[1] * $p[0] + $vp[5] * $p[1] + $vp[9] * $p[2] + $vp[13]) / $w
             ];
         };
-        if ($view === 'head') {
+        if ($this->renderer === '2016' && $view === 'body') {
+            $camera = self::thumbnailCamera2016(self::sceneBounds2016($base, $cfs, $items), $W, $H, false, self::sceneBounds2016($base, $cfs, $items, true));
+            $vp = $camera['vp']; $eye = $camera['eye']; $center = $camera['center'];
+        } elseif ($view === 'head') {
             $hp = $cfs['Head']['p'];
             $center = [$hp[0], $hp[1] + self::HEAD_AIM, $hp[2]];
             $fov = self::HEAD_FOV * M_PI / 180;
@@ -155,8 +159,13 @@ trait Scene {
             }
         }
 
-        [$upTex, $loTex] = self::paintSheets($look, $base['inlet']);
-        $studs = $look['shirt'] ? false : true;
+        if ($this->renderer === '2016') {
+            [$bodyTextures2016, $headTexture2016] = $this->characterTextures2016($look, $faceImg);
+            $upTex = $loTex = $bodyTextures2016['torso'];
+        } else {
+            [$upTex, $loTex] = self::paintSheets($look, $base['inlet']);
+        }
+        $studs = $this->renderer !== '2016' && !$look['shirt'];
         $hb = $base['headBox'];
         $fb = self::FACE_BOX;
         $fs = ($hb['hi'][0] - $hb['lo'][0]) / 2;
@@ -169,9 +178,13 @@ trait Scene {
             [$base['leftLeg'], $cfs['Left Leg'], 1, null, $loTex, false, null],
             [$base['head'], $cfs['Head'], 2, $look['colors']['head'], new Texture($faceImg), false, null],
         ];
+        if ($this->renderer === '2016') {
+            foreach (['torso', 'rightArm', 'leftArm', 'rightLeg', 'leftLeg'] as $i => $part) { $calls[$i][4] = $bodyTextures2016[$part]; }
+            $calls[5] = [$base['head'], $cfs['Head'], 3, null, $headTexture2016, false, null];
+        }
         foreach ($items as $it) {
             if ($it['tex']) {
-                $calls[] = [$it['geom'], $it['cf'], 3, null, $it['tex'], false, null, $it['tint']];
+                $calls[] = [$it['geom'], $it['cf'], 3, null, $it['tex'], false, null, $it['tint'], $it['material'] ?? 256];
             } else {
                 $calls[] = [
                     $it['geom'],
@@ -184,7 +197,9 @@ trait Scene {
                     ],
                     null,
                     false,
-                    null
+                    null,
+                    [1, 1, 1],
+                    $it['material'] ?? 256
                 ];
             }
         }
@@ -195,8 +210,8 @@ trait Scene {
         $cz = self::norm(self::sub($eye, $center));
         $cx = self::norm(self::cross([0, 1, 0], $cz));
         $cy = self::cross($cz, $cx);
-        foreach (self::fxBuild($items, $eye) as $sys) {
-            $this->setupFx($tris, $sys, $base['fx'][$sys['mat']], $vp, $cx, $cy, $Wss, $Hss);
+        foreach (($this->renderer === '2016' ? $this->fxBuild2016($items, $eye) : self::fxBuild($items, $eye)) as $sys) {
+            $this->setupFx($tris, $sys, $sys['texture'] ?? $base['fx'][$sys['mat']], $vp, $cx, $cy, $Wss, $Hss);
         }
         $fast = !$this->exact;
         if ($fast && $SS === 1) {
@@ -222,7 +237,8 @@ trait Scene {
         $tint = $call[7] ?? [1, 1, 1];
         $R = $cf['R'];
         $t = $cf['p'];
-        $L = self::LAMP_DIR;
+        $L = $this->lighting['direction'];
+        [$specular, $specPower] = $this->materialSpecular($call[8] ?? 256);
         $n = count($g['pos']);
         $V = [];
         for ($i = 0; $i < $n; $i++) {
@@ -242,7 +258,7 @@ trait Scene {
             $Vd = self::norm([$eye[0] - $wx, $eye[1] - $wy, $eye[2] - $wz]);
             $Hh = self::norm([$Vd[0] + $L[0], $Vd[1] + $L[1], $Vd[2] + $L[2]]);
             $nh = $N[0] * $Hh[0] + $N[1] * $Hh[1] + $N[2] * $Hh[2];
-            $spec = ($nh > 0 ? $nh ** self::SPEC_EXP : 0.0) * ($ndl >= 0 ? 1 : 0);
+            $spec = ($nh > 0 ? $nh ** $specPower : 0.0) * ($ndl >= 0 ? 1 : 0);
             $cx = $vp[0] * $wx + $vp[4] * $wy + $vp[8] * $wz + $vp[12];
             $cy = $vp[1] * $wx + $vp[5] * $wy + $vp[9] * $wz + $vp[13];
             $cz = $vp[2] * $wx + $vp[6] * $wy + $vp[10] * $wz + $vp[14];
@@ -262,6 +278,14 @@ trait Scene {
                 $vy[] = $p[0];
                 $vy[] = $p[1];
                 $vy[] = $nn[2];
+            }
+            $lightingOffset = null;
+            if ($this->renderer === '2016') {
+                // DefaultHQVS carries normal/view direction to the pixel shader. The
+                // third legacy varying becomes only the positive-light specular gate.
+                $vy[2] = $ndl > 0 ? 1.0 : 0.0;
+                $lightingOffset = count($vy) + 2; // P starts with inverse-W and depth.
+                array_push($vy, $N[0], $N[1], $N[2], $eye[0] - $wx, $eye[1] - $wy, $eye[2] - $wz);
             }
             $V[] = [$cx, $cy, $cz, $cw, $vy];
         }
@@ -313,7 +337,7 @@ trait Scene {
             $tris[] = [
                 'bx0' => max(0, (int)ceil(min($x0, $x1, $x2) - 0.5)), 'bx1' => min($Wss - 1, (int)floor(max($x0, $x1, $x2) - 0.5)),
                 'by0' => max(0, (int)ceil(min($y0, $y1, $y2) - 0.5)), 'by1' => min($Hss - 1, (int)floor(max($y0, $y1, $y2) - 0.5)),
-                'e' => [$a0, $b0, $c0, $a1, $b1, $c1], 'P' => $P, 'mode' => $mode, 'color' => $color, 'tex' => $tex, 'studs' => $studs, 'half' => $half, 'tint' => $tint,
+                'e' => [$a0, $b0, $c0, $a1, $b1, $c1], 'P' => $P, 'mode' => $mode, 'color' => $color, 'tex' => $tex, 'studs' => $studs, 'half' => $half, 'tint' => $tint, 'specular' => $specular, 'specPower' => $specPower, 'lightingOffset' => $lightingOffset,
             ];
         }
     }

@@ -17,10 +17,10 @@ trait FastRaster {
         $N = $W * $H;
         $EPS = -1e-9;
         $doEdges = $SS > 1;
-        $amb = self::AMBIENT;
-        $key = self::KEY;
-        $fill = self::FILL;
-        $ksk = self::KS * self::KEY;
+        $amb = $this->lighting['ambient'];
+        $key = $this->lighting['key'];
+        $fill = $this->lighting['fill'];
+        $ksk = $this->lighting['key'];
         $fx0 = $faceBox[0];
         $fx1 = $faceBox[1];
         $fy0 = $faceBox[2];
@@ -136,7 +136,8 @@ trait FastRaster {
                     }
                 }
             }
-            $sp = $ksk * $g2;
+            $highlight = isset($T['lightingOffset']) ? $this->specular2016($T, $P, $x, $y, $w, $g2) : $g2;
+            $sp = $ksk * $T['specular'] * $highlight;
             $r += $sp;
             $gg += $sp;
             $bb += $sp;
@@ -273,7 +274,9 @@ trait FastRaster {
                                 } else {
                                     $t = $tex->sample($u, $v);
                                 }
-                                if ($mat === 0) {
+                                if (isset($T['fx2016'])) {
+                                    [$sr, $sg, $sb, $sa] = self::fxShade2016($T, $t);
+                                } elseif ($mat === 0) {
                                     $sr = min(1, $t[0] + $vr);
                                     $sg = min(1, $t[1] + $vg);
                                     $sb = min(1, $t[2] + $vb);
@@ -292,11 +295,11 @@ trait FastRaster {
                                 if ($sa > 1) {
                                     $sa = 1;
                                 }
-                                $shaded = $sa > 0 ? 1 : 2;
+                                $shaded = ($sa > 0 || (isset($T['fx2016']) && max($sr, $sg, $sb) > 0)) ? 1 : 2;
                                 $ia = 1 - $sa;
-                                $pr = $sr * $sa * 255;
-                                $pg = $sg * $sa * 255;
-                                $pb = $sb * $sa * 255;
+                                $pr = $sr * (isset($T['fx2016']) ? 1 : $sa) * 255;
+                                $pg = $sg * (isset($T['fx2016']) ? 1 : $sa) * 255;
+                                $pb = $sb * (isset($T['fx2016']) ? 1 : $sa) * 255;
                                 $pa = $sa * 255;
                             }
                             if ($shaded === 2) {

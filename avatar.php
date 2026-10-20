@@ -1,11 +1,11 @@
 <?php
-// get avatar.php with charapp or ids and colors then size view smooth sid and nothing else is accepted
+// get avatar.php with charapp or ids, colors, size, view, smooth, renderer and sid
 declare(strict_types=1);
 umask(0077);
 require __DIR__ . '/src/Vanilla.php';
 $config = require __DIR__ . '/config.php';
 
-const RENDER_VERSION = 'vanilla-1.0';
+const RENDER_VERSION = 'vanilla-1.4-2016-lighting';
 
 function fail(int $code, string $msg): void {
     http_response_code($code);
@@ -85,6 +85,12 @@ if (!isset(Vanilla\Avatar::SIZES[$size])) {
     fail(400, 'Size is one of: ' . implode(', ', array_keys(Vanilla\Avatar::SIZES)) . '.');
 }
 
+try {
+    $renderer = Vanilla\Avatar::validateRenderer($q['renderer'] ?? $config['renderer'] ?? '2012');
+} catch (InvalidArgumentException $e) {
+    fail(400, $e->getMessage());
+}
+
 $smooth = $q['smooth'] ?? '1';
 if ($smooth !== '1' && $smooth !== '0') {
     fail(400, 'smooth is 1 or 0.');
@@ -109,7 +115,7 @@ $key = hash(
     RENDER_VERSION . '|' . implode(',', $ids) . '|' . implode(
         ',',
         $colors ?? Vanilla\Avatar::DEFAULT_COLORS
-    ) . '|' . $size . '|' . ($smooth ? 's' : 'h') . '|' . $view
+    ) . '|' . $size . '|' . ($smooth ? 's' : 'h') . '|' . $view . '|' . $renderer
 );
 $file = "$cacheDir/render-$key.png";
 $etag = '"' . substr($key, 0, 32) . '"';
@@ -242,7 +248,7 @@ try {
         'allowPrivateHosts' => !empty($config['allowPrivateHosts']),
         'cacheDir' => $cacheDir,
     ]);
-    $r = $avatar->render(['ids' => $ids, 'colors' => $colors, 'size' => $size, 'smooth' => $smooth, 'view' => $view]);
+    $r = $avatar->render(['ids' => $ids, 'colors' => $colors, 'size' => $size, 'smooth' => $smooth, 'view' => $view, 'renderer' => $renderer]);
 } catch (InvalidArgumentException $e) {
     fail(400, $e->getMessage());
 } catch (Throwable $e) {
