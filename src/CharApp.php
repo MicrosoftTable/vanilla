@@ -45,12 +45,14 @@ final class CharApp {
         $ids = [];
         $colors = null;
         $fetchedColors = false;
+        $notes = [];
         foreach ($entries as $e) {
             $k = self::kind($e);
             if ($k === 'other') {
                 if (preg_match('#^https?://#i', $e)) {
                     self::checkHost($e, $hosts);
                 }
+                $notes[] = 'charapp entry ignored: ' . substr($e, 0, 80);
                 continue;
             }
             self::checkHost($e, $hosts);
@@ -68,19 +70,22 @@ final class CharApp {
             $fetchedColors = true;
             $xml = self::get($e, $opts);
             if ($xml === null) {
+                $notes[] = 'bodycolors could not be fetched' . (Net::$error !== '' ? ' (' . Net::$error . ')' : '');
                 continue;
             }
             $c = self::bodyColors($xml);
             if ($c !== null) {
                 $colors = $c;
+            } else {
+                $notes[] = 'bodycolors had no BodyColors data';
             }
         }
-        return ['ids' => $ids, 'colors' => $colors];
+        return ['ids' => array_slice($ids, 0, 1000), 'colors' => $colors, 'notes' => array_slice($notes, 0, 8), 'entries' => count($entries)];
     }
 
     private static function split(string $s): array {
         $out = [];
-        foreach (explode(';', $s) as $p) {
+        foreach (preg_split('/[;\r\n]+/', $s) as $p) {
             $p = trim($p);
             if ($p !== '') {
                 $out[] = $p;

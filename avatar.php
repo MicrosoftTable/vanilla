@@ -50,6 +50,7 @@ if (count($ids) > Vanilla\Avatar::MAX_IDS) {
 }
 $ids = array_values(array_unique($ids));
 $colors = null;
+$caNotes = [];
 if (isset($q['colors']) && $q['colors'] !== '') {
     $colors = preg_split('/\s*,\s*/', strtolower(trim($q['colors'])));
     if (count($colors) !== 6) {
@@ -83,6 +84,10 @@ if (isset($q['charapp']) && $q['charapp'] !== '') {
     }
     $ids = $ca['ids'];
     $colors = $given ?? $ca['colors'];
+    $caNotes = $ca['notes'];
+    if (!$ids && $ca['colors'] === null) {
+        fail(400, 'The charapp had nothing vanilla could use (' . $ca['entries'] . ' entries). ' . implode('; ', $ca['notes']));
+    }
     if (count($ids) > Vanilla\Avatar::MAX_IDS) {
         fail(400, 'At most ' . Vanilla\Avatar::MAX_IDS . ' assets in a charapp.');
     }
@@ -288,4 +293,4 @@ if (@file_put_contents($tmp, $out) !== false) {
 flock($slot, LOCK_UN);
 fclose($slot);
 keepOnly($cacheDir, $sid, $file, $maxAge, $maxBytes);
-send($out, $etag, $maxAge, $r['notes']);
+send($out, $etag, $maxAge, array_merge($caNotes, $r['notes']));
