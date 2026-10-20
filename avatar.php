@@ -1,5 +1,5 @@
 <?php
-// get avatar.php with charapp or ids, colors, size, view, smooth, renderer and sid
+// get avatar.php with charapp or ids, colors, size, view, smooth, renderer, format, bg and sid
 declare(strict_types=1);
 umask(0077);
 require __DIR__ . '/src/Vanilla.php';
@@ -77,9 +77,16 @@ if (isset($q['charapp']) && $q['charapp'] !== '') {
         fail(400, 'At most ' . Vanilla\Avatar::MAX_IDS . ' assets in a charapp.');
     }
 }
-if (isset($q['format']) && strtolower($q['format']) !== 'png') {
-    fail(400, 'format is png.');
+$format = strtolower($q['format'] ?? $config['format'] ?? 'png');
+$format = $format === 'jpeg' ? 'jpg' : $format;
+if (!isset(Vanilla\Img::FORMATS[$format])) {
+    fail(400, 'format is one of: ' . implode(', ', array_keys(Vanilla\Img::FORMATS)) . '.');
 }
+$bg = $q['bg'] ?? 'ffffff';
+if (!preg_match('/^#?[0-9a-fA-F]{6}$/D', $bg)) {
+    fail(400, 'bg is a hex colour like ffffff.');
+}
+$bg = (int)hexdec(ltrim($bg, '#'));
 $size = $q['size'] ?? (isset($q['x'], $q['y']) ? $q['x'] . 'x' . $q['y'] : '150x200');
 if (!isset(Vanilla\Avatar::SIZES[$size])) {
     fail(400, 'Size is one of: ' . implode(', ', array_keys(Vanilla\Avatar::SIZES)) . '.');
@@ -115,9 +122,9 @@ $key = hash(
     RENDER_VERSION . '|' . implode(',', $ids) . '|' . implode(
         ',',
         $colors ?? Vanilla\Avatar::DEFAULT_COLORS
-    ) . '|' . $size . '|' . ($smooth ? 's' : 'h') . '|' . $view . '|' . $renderer
+    ) . '|' . $size . '|' . ($smooth ? 's' : 'h') . '|' . $view . '|' . $renderer . '|' . $format . ($format === 'jpg' ? '|' . $bg : '')
 );
-$file = "$cacheDir/render-$key.png";
+$file = "$cacheDir/render-$key.$format";
 $etag = '"' . substr($key, 0, 32) . '"';
 $maxAge = (int)$config['cacheSeconds'];
 
@@ -126,7 +133,7 @@ function keepOnly(string $dir, string $sid, string $file, int $maxAge, int $maxB
     if ($sid !== '') {
         $ptr = "$dir/sid-$sid";
         $prev = is_file($ptr) ? trim((string)@file_get_contents($ptr)) : '';
-        if ($prev !== '' && $prev !== basename($file) && preg_match('/^render-[0-9a-f]{64}\.png$/D', $prev)) {
+        if ($prev !== '' && $prev !== basename($file) && preg_match('/^render-[0-9a-f]{64}\.(png|webp|jpg)$/D', $prev)) {
             @unlink("$dir/$prev");
         }
         @file_put_contents($ptr, basename($file), LOCK_EX);
@@ -140,7 +147,7 @@ function keepOnly(string $dir, string $sid, string $file, int $maxAge, int $maxB
     $sids = [];
     // only our own file names are ever touched and links are skipped
     foreach (@scandir($dir) ?: [] as $b) {
-        if (!preg_match('/^(render-[0-9a-f]{64}\.png|sid-[0-9a-f]{16,32}|asset-\d{1,18}|img-\d{1,18}h?\.z|charapp-[0-9a-f]{64}|.+\.\d+\.tmp)$/D', $b)) {
+        if (!preg_match('/^(render-[0-9a-f]{64}\.(png|webp|jpg)|sid-[0-9a-f]{16,32}|asset-\d{1,18}|img-\d{1,18}h?\.z|charapp-[0-9a-f]{64}|.+\.\d+\.tmp)$/D', $b)) {
             continue;
         }
         $f = "$dir/$b";
@@ -191,7 +198,8 @@ function keepOnly(string $dir, string $sid, string $file, int $maxAge, int $maxB
 $maxBytes = (int)($config['cacheMaxMB'] ?? 200) * 1048576;
 
 function send(string $png, string $etag, int $maxAge, array $notes = []): void {
-    header('Content-Type: image/png');
+    global $format;
+    header('Content-Type: ' . Vanilla\Img::FORMATS[$format]);
     header('Cache-Control: public, max-age=' . $maxAge);
     header('ETag: ' . $etag);
     if ($notes) {
@@ -255,11 +263,17 @@ try {
     error_log('avatar.php: ' . $e->getMessage());
     fail(500, 'The render failed.');
 }
+$out = Vanilla\Img::encode($r['png'], $format, $bg);
+if ($out === null) {
+    flock($slot, LOCK_UN);
+    fclose($slot);
+    fail(501, 'This server cannot make ' . $format . '.');
+}
 $tmp = $file . '.' . getmypid() . '.tmp';
-if (@file_put_contents($tmp, $r['png']) !== false) {
+if (@file_put_contents($tmp, $out) !== false) {
     @rename($tmp, $file);
 }
 flock($slot, LOCK_UN);
 fclose($slot);
 keepOnly($cacheDir, $sid, $file, $maxAge, $maxBytes);
-send($r['png'], $etag, $maxAge, $r['notes']);
+send($out, $etag, $maxAge, $r['notes']);

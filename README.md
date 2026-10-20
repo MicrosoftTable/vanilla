@@ -66,6 +66,8 @@ avatar.php?ids=1234,5678&colors=f5cd30,0d69ac,f5cd30,f5cd30,a4bd47,a4bd47&size=1
 | `size` | `150x200` (default), `180x220`, `100x100`, `352x352`, `420x420`, `512x512`, `150x150`, `48x48`. `x` and `y` work too |
 | `view` | `body` (default) or `head` for a headshot |
 | `renderer` | `2012` (default) or experimental `2016`; separate lighting, material highlights, and legacy particle effects |
+| `format` | `png` (default), `webp` or `jpg`. png and webp keep transparency, jpg gets a solid background |
+| `bg` | background colour for jpg as hex, `ffffff` by default |
 | `smooth` | `1` (default) or `0` for hard edges |
 | `sid` | 16 to 32 hex chars. a new render with the same sid deletes the previous one |
 

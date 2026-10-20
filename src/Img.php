@@ -578,4 +578,40 @@ final class Img {
         ) . $chunk('IDAT', gzcompress($raw, 9)) . $chunk('IEND', '');
     }
 
+
+    // formats avatar.php can send and their mime types
+    const FORMATS = ['png' => 'image/png', 'webp' => 'image/webp', 'jpg' => 'image/jpeg'];
+
+    // a rendered png as another format, jpg has no alpha so it is flattened onto bg
+
+    static function encode(string $png, string $format, int $bg = 0xffffff): ?string {
+        if ($format === 'png') {
+            return $png;
+        }
+        if (!function_exists('imagecreatefromstring') || !function_exists('image' . ($format === 'jpg' ? 'jpeg' : $format))) {
+            return null;
+        }
+        $src = @imagecreatefromstring($png);
+        if (!$src) {
+            return null;
+        }
+        $w = imagesx($src);
+        $h = imagesy($src);
+        ob_start();
+        if ($format === 'webp') {
+            imagealphablending($src, false);
+            imagesavealpha($src, true);
+            imagewebp($src, null, 90);
+        } else {
+            $dst = imagecreatetruecolor($w, $h);
+            imagefill($dst, 0, 0, imagecolorallocate($dst, ($bg >> 16) & 255, ($bg >> 8) & 255, $bg & 255));
+            imagealphablending($dst, true);
+            imagecopy($dst, $src, 0, 0, 0, 0, $w, $h);
+            imagejpeg($dst, null, 90);
+            imagedestroy($dst);
+        }
+        imagedestroy($src);
+        $out = (string)ob_get_clean();
+        return $out === '' ? null : $out;
+    }
 }
