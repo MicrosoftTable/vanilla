@@ -35,7 +35,7 @@ final class CharApp {
             self::checkHost($entries[0], $hosts);
             $body = self::get($entries[0], $opts);
             if ($body === null) {
-                throw new \InvalidArgumentException('could not fetch the charapp url');
+                throw new \InvalidArgumentException('could not fetch the charapp url (' . (Net::$error ?: 'no reply') . ')');
             }
             $entries = self::split($body);
         }
@@ -141,7 +141,7 @@ final class CharApp {
         $buf = Net::get($url, [
             'maxBytes' => self::MAX_FETCH_BYTES,
             'hosts' => self::hosts($opts),
-            'redirects' => 0,
+            'redirects' => 3,
             'allowPrivate' => !empty($opts['allowPrivateHosts']),
             'ports' => $port ? [(int)$port] : [],
             'timeout' => 15,

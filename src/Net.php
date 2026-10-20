@@ -3,12 +3,17 @@ namespace Vanilla;
 
 // every outside request goes through here so it can only reach public addresses on the hosts it is allowed to
 final class Net {
+    // why the last get returned null
+    static $error = '';
+
     // opts: maxBytes hosts (list of allowed hostnames or null for any public host) redirects allowPrivate timeout
     static function get(string $url, array $opts): ?string {
+        self::$error = '';
         $hops = max(0, (int)($opts['redirects'] ?? 0));
         for ($i = 0; $i <= $hops; $i++) {
             $t = self::target($url, $opts);
             if ($t === null) {
+                self::$error = 'blocked or unresolvable ' . substr((string)parse_url($url, PHP_URL_HOST), 0, 60);
                 return null;
             }
             $buf = '';
@@ -17,6 +22,7 @@ final class Net {
             $ok = curl_exec($ch);
             $code = (int)curl_getinfo($ch, CURLINFO_RESPONSE_CODE);
             $loc = (string)curl_getinfo($ch, CURLINFO_REDIRECT_URL);
+            $err = curl_error($ch);
             curl_close($ch);
             if ($ok && $code >= 200 && $code < 300) {
                 return $buf;
@@ -25,8 +31,10 @@ final class Net {
                 $url = $loc;
                 continue;
             }
+            self::$error = $code >= 300 ? 'http ' . $code : ($err !== '' ? substr($err, 0, 80) : 'http ' . $code);
             return null;
         }
+        self::$error = 'too many redirects';
         return null;
     }
 
@@ -132,6 +140,7 @@ final class Net {
             CURLOPT_TIMEOUT => (int)($opts['timeout'] ?? 20),
             CURLOPT_ENCODING => '',
             CURLOPT_USERAGENT => 'Vanilla/1.0',
+            CURLOPT_HTTPHEADER => ['Accept: */*'],
             CURLOPT_NOPROXY => '*',
             CURLOPT_WRITEFUNCTION => function ($ch, $d) use (&$buf, $max) {
                 $buf .= $d;
