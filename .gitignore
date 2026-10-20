@@ -1,3 +1,4 @@
 cache/*
 !cache/.gitkeep
+!cache/.htaccess
 config.local.php

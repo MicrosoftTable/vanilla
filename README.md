@@ -88,6 +88,7 @@ avatar.php            the endpoint, reads the request and sends back the png
 config.php            your settings
 src/Vanilla.php       the renderer, render() is the entry point
 src/CharApp.php       reads charapp links and lists
+src/Net.php           all outside requests, public addresses only
 src/parts/            the renderer split by job (assets, meshes, look building, particles, scene, rasterisers)
 src/Rbxm.php          reads roblox models (xml and binary)
 src/Img.php           image decoding and drawing

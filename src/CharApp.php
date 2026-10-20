@@ -2,10 +2,11 @@
 namespace Vanilla;
 
 require_once __DIR__ . '/Rbxm.php';
+require_once __DIR__ . '/Net.php';
 
 // reads a roblox charapp string like https://host/;https://host/asset/?id=1;https://host/asset/?id=2;
 final class CharApp {
-    const MAX_CHARS = 4096, MAX_FETCH_BYTES = 65536;
+    const MAX_CHARS = 4096, MAX_FETCH_BYTES = 65536, MAX_ENTRIES = 64;
     const PARTS = [
         'HeadColor' => 0,
         'TorsoColor' => 1,
@@ -38,8 +39,12 @@ final class CharApp {
             }
             $entries = self::split($body);
         }
+        if (count($entries) > self::MAX_ENTRIES) {
+            throw new \InvalidArgumentException('charapp has too many entries');
+        }
         $ids = [];
         $colors = null;
+        $fetchedColors = false;
         foreach ($entries as $e) {
             $k = self::kind($e);
             if ($k === 'other') {
@@ -56,6 +61,11 @@ final class CharApp {
                 }
                 continue;
             }
+            // only the first bodycolors url is fetched
+            if ($fetchedColors) {
+                continue;
+            }
+            $fetchedColors = true;
             $xml = self::get($e, $opts);
             if ($xml === null) {
                 continue;
@@ -95,7 +105,10 @@ final class CharApp {
     private static function hosts(array $opts): array {
         $h = [];
         foreach (($opts['allowedHosts'] ?? []) as $x) {
-            $h[] = strtolower((string)$x);
+            $x = strtolower(trim((string)$x));
+            if (preg_match('/^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)*$/', $x)) {
+                $h[] = $x;
+            }
         }
         $b = parse_url((string)($opts['assetBase'] ?? ''), PHP_URL_HOST);
         if ($b) {
@@ -124,19 +137,16 @@ final class CharApp {
         if ($file && is_file($file) && filemtime($file) > time() - 30) {
             return (string)file_get_contents($file);
         }
-        $buf = '';
-        $ch = curl_init($url);
-        // no redirects so a whitelisted host cannot bounce the request somewhere else
-        curl_setopt_array($ch, [CURLOPT_FOLLOWLOCATION => false, CURLOPT_PROTOCOLS => CURLPROTO_HTTP | CURLPROTO_HTTPS, CURLOPT_CONNECTTIMEOUT => 8, CURLOPT_TIMEOUT => 15,
-            CURLOPT_ENCODING => '', CURLOPT_USERAGENT => 'Vanilla/1.0',
-            CURLOPT_WRITEFUNCTION => function ($c, $d) use (&$buf) {
-            $buf .= $d;
-            return strlen($buf) > CharApp::MAX_FETCH_BYTES ? 0 : strlen($d);
-        }]);
-        $ok = curl_exec($ch);
-        $code = curl_getinfo($ch, CURLINFO_RESPONSE_CODE);
-        curl_close($ch);
-        if (!$ok || $code < 200 || $code >= 300) {
+        $port = parse_url((string)($opts['assetBase'] ?? ''), PHP_URL_PORT);
+        $buf = Net::get($url, [
+            'maxBytes' => self::MAX_FETCH_BYTES,
+            'hosts' => self::hosts($opts),
+            'redirects' => 0,
+            'allowPrivate' => !empty($opts['allowPrivateHosts']),
+            'ports' => $port ? [(int)$port] : [],
+            'timeout' => 15,
+        ]);
+        if ($buf === null) {
             return null;
         }
         if ($file) {

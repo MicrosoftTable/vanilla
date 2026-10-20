@@ -1,6 +1,7 @@
 <?php
 // get avatar.php with charapp or ids and colors then size view smooth sid and nothing else is accepted
 declare(strict_types=1);
+umask(0077);
 require __DIR__ . '/src/Vanilla.php';
 $config = require __DIR__ . '/config.php';
 
@@ -60,12 +61,12 @@ if (isset($q['charapp']) && $q['charapp'] !== '') {
     $given = $colors;
     $cd = $config['cacheDir'];
     if (!is_dir($cd)) {
-        @mkdir($cd, 0750, true);
+        @mkdir($cd, 0700, true);
     }
     try {
         $ca = Vanilla\CharApp::resolve(
             $q['charapp'],
-            ['assetBase' => $config['assetBase'], 'allowedHosts' => $config['allowedHosts'] ?? [], 'cacheDir' => $cd]
+            ['assetBase' => $config['assetBase'], 'allowedHosts' => $config['allowedHosts'] ?? [], 'allowPrivateHosts' => !empty($config['allowPrivateHosts']), 'cacheDir' => $cd]
         );
     } catch (InvalidArgumentException $e) {
         fail(400, $e->getMessage());
@@ -100,7 +101,7 @@ if ($sid !== '' && !preg_match('/^[0-9a-f]{16,32}$/D', $sid)) {
 
 $cacheDir = $config['cacheDir'];
 if (!is_dir($cacheDir)) {
-    @mkdir($cacheDir, 0750, true);
+    @mkdir($cacheDir, 0700, true);
 }
 // a finished render for exactly this request is reused
 $key = hash(
@@ -130,34 +131,43 @@ function keepOnly(string $dir, string $sid, string $file, int $maxAge, int $maxB
     $now = time();
     $keep = [];
     $total = 0;
-    foreach (glob("$dir/*") ?: [] as $f) {
-        if (!is_file($f)) {
+    $sids = [];
+    // only our own file names are ever touched and links are skipped
+    foreach (@scandir($dir) ?: [] as $b) {
+        if (!preg_match('/^(render-[0-9a-f]{64}\.png|sid-[0-9a-f]{16,32}|asset-\d{1,18}|img-\d{1,18}h?\.z|charapp-[0-9a-f]{64}|.+\.\d+\.tmp)$/D', $b)) {
             continue;
         }
-        $b = basename($f);
-        $age = $now - (int)filemtime($f);
+        $f = "$dir/$b";
+        if (is_link($f) || !is_file($f)) {
+            continue;
+        }
+        $mt = (int)filemtime($f);
+        $age = $now - $mt;
         if (substr($b, -4) === '.tmp') {
             if ($age > 3600) {
                 @unlink($f);
             }
-            continue;
-        }
-        if (preg_match('/^(render-[0-9a-f]{64}\.png|sid-[0-9a-f]+)$/D', $b)) {
+        } elseif ($b[0] === 'c') {
+            if ($age > 300) {
+                @unlink($f);
+            }
+        } elseif ($b[0] === 's') {
             if ($age > $maxAge) {
                 @unlink($f);
-            } elseif ($b[0] !== 's') {
-                $keep[$f] = filemtime($f);
-                $total += filesize($f);
-            }
-            continue;
-        }
-        if (preg_match('/^(asset|img)-/', $b)) {
-            if ($age > 86400) {
-                @unlink($f);
             } else {
-                $keep[$f] = filemtime($f);
-                $total += filesize($f);
+                $sids[$f] = $mt;
             }
+        } elseif ($age > ($b[0] === 'r' ? $maxAge : 86400)) {
+            @unlink($f);
+        } else {
+            $keep[$f] = $mt;
+            $total += (int)filesize($f);
+        }
+    }
+    if (count($sids) > 20000) {
+        asort($sids);
+        foreach (array_slice(array_keys($sids), 0, count($sids) - 20000) as $f) {
+            @unlink($f);
         }
     }
     if ($total > $maxBytes) {
@@ -226,7 +236,12 @@ if (is_file($file) && filemtime($file) > time() - $maxAge) {
 }
 
 try {
-    $avatar = new Vanilla\Avatar(['assetBase' => $config['assetBase'], 'cacheDir' => $cacheDir]);
+    $avatar = new Vanilla\Avatar([
+        'assetBase' => $config['assetBase'],
+        'allowedHosts' => $config['allowedHosts'] ?? [],
+        'allowPrivateHosts' => !empty($config['allowPrivateHosts']),
+        'cacheDir' => $cacheDir,
+    ]);
     $r = $avatar->render(['ids' => $ids, 'colors' => $colors, 'size' => $size, 'smooth' => $smooth, 'view' => $view]);
 } catch (InvalidArgumentException $e) {
     fail(400, $e->getMessage());

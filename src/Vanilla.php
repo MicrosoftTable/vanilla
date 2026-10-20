@@ -1,7 +1,7 @@
 <?php
 namespace Vanilla;
 
-foreach (['BrickColors', 'Inst', 'Rbxm', 'Img', 'PngStream', 'Texture', 'CharApp'] as $file) {
+foreach (['BrickColors', 'Net', 'Inst', 'Rbxm', 'Img', 'PngStream', 'Texture', 'CharApp'] as $file) {
     require_once __DIR__ . '/' . $file . '.php';
 }
 
@@ -65,6 +65,7 @@ final class Avatar {
 
     private $assetBase;
     private $allowedHosts = [];
+    private $allowPrivate = false;
     private $subpixelBits;
     private $dataDir;
     private $cacheDir;
@@ -76,6 +77,7 @@ final class Avatar {
     function __construct(array $opts = []) {
         $this->assetBase = $opts['assetBase'] ?? 'https://example.com/asset/?id=';
         $this->allowedHosts = (array)($opts['allowedHosts'] ?? []);
+        $this->allowPrivate = !empty($opts['allowPrivateHosts']);
         $this->dataDir = $opts['dataDir'] ?? dirname(__DIR__) . '/data';
         $this->cacheDir = $opts['cacheDir'] ?? null;
         $this->fetcher = $opts['fetcher'] ?? null;
@@ -84,34 +86,7 @@ final class Avatar {
     }
 
     private function base(): array {
-        if (self::$base) {
-            return self::$base;
-        }
-        $cf = null;
-        if ($this->cacheDir && is_dir($this->cacheDir)) {
-            // meshes and textures that never change are cached on disk after the first render
-            $newest = max(array_map('filemtime', array_merge(glob(__DIR__ . '/*.php'), glob(__DIR__ . '/parts/*.php'))));
-            $cf = $this->cacheDir . '/base-' . md5($newest . '|' . $this->dataDir) . '.ser';
-            if (is_file($cf)) {
-                $b = @unserialize((string)@file_get_contents($cf), ['allowed_classes' => [Texture::class, Img::class]]);
-                if (is_array($b) && isset($b['face'])) {
-                    return self::$base = $b;
-                }
-            }
-        }
-        $b = $this->buildBase();
-        if ($cf) {
-            foreach (glob($this->cacheDir . '/base-*.ser') ?: [] as $old) {
-                if ($old !== $cf) {
-                    @unlink($old);
-                }
-            }
-            $tmp = $cf . '.' . getmypid() . '.tmp';
-            if (@file_put_contents($tmp, serialize($b)) !== false) {
-                @rename($tmp, $cf);
-            }
-        }
-        return $b;
+        return self::$base ?: $this->buildBase();
     }
 
     private function buildBase(): array {
@@ -147,7 +122,7 @@ final class Avatar {
             }
             $c = CharApp::resolve(
                 (string)$req['charapp'],
-                ['assetBase' => $this->assetBase, 'allowedHosts' => $this->allowedHosts, 'cacheDir' => $this->cacheDir]
+                ['assetBase' => $this->assetBase, 'allowedHosts' => $this->allowedHosts, 'allowPrivateHosts' => $this->allowPrivate, 'cacheDir' => $this->cacheDir]
             );
             $req['ids'] = $c['ids'];
             $req['colors'] = $req['colors'] ?? $c['colors'];

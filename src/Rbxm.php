@@ -5,6 +5,7 @@ require_once __DIR__ . '/BrickColors.php';
 
 // reads xml and binary roblox models into one tree
 final class Rbxm {
+    const MAX_BYTES = 16777216, MAX_DEPTH = 200, MAX_ELEMENTS = 500000, MAX_INSTANCES = 100000;
 
     static function brickColor($n) {
         $c = BrickColors::rgb($n);
@@ -12,6 +13,9 @@ final class Rbxm {
     }
 
     static function parse(string $bytes): array {
+        if (strlen($bytes) > self::MAX_BYTES) {
+            throw new \RuntimeException('model too large');
+        }
         if (strlen($bytes) > 8 && substr($bytes, 0, 8) === '<roblox!') {
             return self::parseBinary($bytes);
         }
@@ -22,7 +26,13 @@ final class Rbxm {
         return preg_replace_callback('/&(#x[0-9a-fA-F]+|#\d+|[a-z]+);/', function ($m) {
             $e = $m[1];
             if ($e[0] === '#') {
+                if (strlen($e) > 9) {
+                    return '';
+                }
                 $cp = $e[1] === 'x' ? hexdec(substr($e, 2)) : (int)substr($e, 1);
+                if ($cp < 1 || $cp > 0x10FFFF || ($cp >= 0xD800 && $cp <= 0xDFFF)) {
+                    return '';
+                }
                 return function_exists('mb_chr') ? (mb_chr($cp, 'UTF-8') ?: '') : html_entity_decode(
                     '&#' . $cp . ';',
                     ENT_QUOTES | ENT_HTML5,
@@ -36,9 +46,16 @@ final class Rbxm {
 
     private static function xmlTree(string $src): array {
         $re = '/<!\[CDATA\[([\s\S]*?)\]\]>|<!--[\s\S]*?-->|<\?[\s\S]*?\?>|<!DOCTYPE[^>]*>|<(\/?)([A-Za-z_][\w.:-]*)((?:\s+[\w.:-]+\s*=\s*(?:"[^"]*"|\'[^\']*\'))*)\s*(\/?)>|([^<]+)/';
+        // no dtds or entity declarations: nothing in a model needs them
+        if (stripos($src, '<!DOCTYPE') !== false || stripos($src, '<!ENTITY') !== false) {
+            throw new \RuntimeException('xml with a doctype is not accepted');
+        }
         $root = ['tag' => '#root', 'attrs' => [], 'kids' => [], 'text' => ''];
         $stack = [&$root];
-        preg_match_all($re, $src, $all, PREG_SET_ORDER | PREG_UNMATCHED_AS_NULL);
+        if (preg_match_all($re, $src, $all, PREG_SET_ORDER | PREG_UNMATCHED_AS_NULL) === false) {
+            throw new \RuntimeException('xml could not be read');
+        }
+        $count = 0;
         foreach ($all as $m) {
             $cur = &$stack[count($stack) - 1];
             if ($m[1] !== null) {
@@ -62,6 +79,9 @@ final class Rbxm {
                 unset($cur);
                 continue;
             }
+            if (++$count > self::MAX_ELEMENTS) {
+                throw new \RuntimeException('xml has too many elements');
+            }
             $el = ['tag' => $m[3], 'attrs' => [], 'kids' => [], 'text' => ''];
             if (preg_match_all('/([\w.:-]+)\s*=\s*(?:"([^"]*)"|\'([^\']*)\')/', $m[4] ?? '', $am, PREG_SET_ORDER | PREG_UNMATCHED_AS_NULL)) {
                 foreach ($am as $a) {
@@ -70,6 +90,9 @@ final class Rbxm {
             }
             $cur['kids'][] = $el;
             if (!$m[5]) {
+                if (count($stack) > self::MAX_DEPTH) {
+                    throw new \RuntimeException('xml is nested too deeply');
+                }
                 $stack[] = &$cur['kids'][count($cur['kids']) - 1];
             }
             unset($cur);
@@ -428,6 +451,15 @@ final class Rbxm {
         }
     }
 
+    private static function wouldLoop(Inst $child, Inst $parent): bool {
+        for ($x = $parent, $d = 0; $x !== null; $x = $x->parent, $d++) {
+            if ($x === $child || $d > self::MAX_DEPTH) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     static function parseBinary(string $bytes): array {
         $p = 14 + 10 + 8;
         $len = strlen($bytes);
@@ -473,6 +505,9 @@ final class Rbxm {
                 $q += 1;
                 $n = self::u32le($data, $q);
                 $q += 4;
+                if ($n > self::MAX_INSTANCES || $q + $n * 4 > strlen($data) || count($insts) + $n > self::MAX_INSTANCES) {
+                    throw new \RuntimeException('bad instance chunk');
+                }
                 $refs = self::readInts($data, $q, $n, 4);
                 $q += $n * 4;
                 $acc = 0;
@@ -509,6 +544,9 @@ final class Rbxm {
                 $q += 1;
                 $n = self::u32le($data, $q);
                 $q += 4;
+                if ($n > self::MAX_INSTANCES || $q + $n * 8 > strlen($data)) {
+                    throw new \RuntimeException('bad parent chunk');
+                }
                 $a = self::readInts($data, $q, $n, 4);
                 $b = self::readInts($data, $q + $n * 4, $n, 4);
                 $ca = 0;
@@ -527,11 +565,20 @@ final class Rbxm {
             $byRef[(string)$k] = $x;
             $x->name = is_string($x->props['Name'] ?? null) ? $x->props['Name'] : $x->cls;
         }
+        $placed = [];
         foreach ($prnt ?: [] as $r) {
             $c = $insts[$r[0]] ?? null;
             $par = $r[1] < 0 ? null : ($insts[$r[1]] ?? null);
             if (!$c) {
                 continue;
+            }
+            // a part can only have one parent and can never end up inside itself
+            if (isset($placed[spl_object_id($c)])) {
+                continue;
+            }
+            $placed[spl_object_id($c)] = true;
+            if ($par && self::wouldLoop($c, $par)) {
+                $par = null;
             }
             if ($par) {
                 $c->parent = $par;

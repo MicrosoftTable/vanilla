@@ -25,8 +25,11 @@ final class Img {
             return null;
         }
         $h = unpack('Nw/Nh', $s);
-        $raw = @gzuncompress(substr($s, 8));
-        if ($raw === false || $h['w'] < 1 || $h['h'] < 1 || strlen($raw) !== $h['w'] * $h['h'] * 4) {
+        if ($h['w'] < 1 || $h['h'] < 1 || $h['w'] > 4096 || $h['h'] > 4096) {
+            return null;
+        }
+        $raw = @gzuncompress(substr($s, 8), $h['w'] * $h['h'] * 4 + 1);
+        if ($raw === false || strlen($raw) !== $h['w'] * $h['h'] * 4) {
             return null;
         }
         return new Img($h['w'], $h['h'], array_values(unpack('N*', $raw)));
@@ -67,7 +70,7 @@ final class Img {
         if (!$info || $info[0] < 1 || $info[1] < 1 || $info[0] > 4096 || $info[1] > 4096 || $info[0] * $info[1] > 16777216) {
             return null;
         }
-        if ($info[0] * $info[1] > 4194304 && !self::memoryRoom((int)($info[0] * $info[1] * 4 * 3))) {
+        if (!self::memoryRoom((int)($info[0] * $info[1] * 5 + min($info[0], $cap) * min($info[1], $cap) * 24))) {
             return null;
         }
         $g = @imagecreatefromstring($b);
@@ -143,7 +146,8 @@ final class Img {
             return null;
         }
         $big = $info[0] > $maxSide || $info[1] > $maxSide;
-        if ($big && !self::memoryRoom((int)($info[0] * $info[1] * 4 * 3))) {
+        $kept = min($info[0], $maxSide) * min($info[1], $maxSide);
+        if (!self::memoryRoom((int)($info[0] * $info[1] * 5 + $kept * 24))) {
             return null;
         }
         $g = @imagecreatefromstring($b);
@@ -218,15 +222,18 @@ final class Img {
         $h = $ihdr['h'];
         $depth = $ihdr['depth'];
         $ct = $ihdr['ctype'];
-        if ($w < 1 || $h < 1 || $w > $maxSide || $h > $maxSide) {
+        if ($w < 1 || $h < 1 || $w > $maxSide || $h > $maxSide || !self::memoryRoom($w * $h * 24)) {
             return null;
         }
         $chan = [0 => 1, 2 => 3, 3 => 1, 4 => 2, 6 => 4][$ct] ?? 0;
         if (!$chan || !in_array($depth, [1, 2, 4, 8, 16], true)) {
             return false;
         }
-        $raw = @zlib_decode($idat);
-        if ($raw === false) {
+        // the most a valid image of this size can unpack to, so a compression bomb stops early
+        $rowBytes = (int)ceil($w * $chan * $depth / 8);
+        $limit = $h * ($rowBytes + 1) + ($ihdr['inter'] ? 7 * ($h + 8) * 2 : 0) + 64;
+        $raw = @zlib_decode($idat, $limit + 1);
+        if ($raw === false || strlen($raw) > $limit) {
             return false;
         }
         $bpp = max(1, ($chan * $depth) >> 3);

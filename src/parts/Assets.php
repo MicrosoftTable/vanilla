@@ -55,32 +55,19 @@ trait Assets {
         return $this->cache[$id] = $b;
     }
 
-    private $ch = null;
-
-    // assets are only ever fetched by number from the one configured host
-    private function curlOpts(&$buf): array {
-        $max = self::MAX_ASSET_BYTES;
+    // assets are only ever fetched by number from the one configured host and only from public addresses
+    private function netOpts(): array {
+        $port = parse_url($this->assetBase, PHP_URL_PORT);
         return [
-            CURLOPT_FOLLOWLOCATION => true, CURLOPT_MAXREDIRS => 5,
-            CURLOPT_PROTOCOLS => CURLPROTO_HTTP | CURLPROTO_HTTPS, CURLOPT_REDIR_PROTOCOLS => CURLPROTO_HTTP | CURLPROTO_HTTPS,
-            CURLOPT_CONNECTTIMEOUT => 8, CURLOPT_TIMEOUT => 20, CURLOPT_ENCODING => '', CURLOPT_USERAGENT => 'Vanilla/1.0',
-            CURLOPT_WRITEFUNCTION => function ($ch, $d) use (&$buf, $max) {
-            $buf .= $d;
-            return strlen($buf) > $max ? 0 : strlen($d);
-        },
+            'maxBytes' => self::MAX_ASSET_BYTES,
+            'redirects' => 4,
+            'allowPrivate' => $this->allowPrivate,
+            'ports' => $port ? [(int)$port] : [],
         ];
     }
 
     private function httpGet(string $url): ?string {
-        $buf = '';
-        if (!$this->ch) {
-            $this->ch = curl_init();
-        }
-        curl_setopt_array($this->ch, $this->curlOpts($buf));
-        curl_setopt($this->ch, CURLOPT_URL, $url);
-        $ok = curl_exec($this->ch);
-        $code = curl_getinfo($this->ch, CURLINFO_RESPONSE_CODE);
-        return ($ok && $code >= 200 && $code < 300) ? $buf : null;
+        return Net::get($url, $this->netOpts());
     }
 
     static function referencedIds(string $bytes): array {
@@ -144,13 +131,18 @@ trait Assets {
         if (!$need) {
             return;
         }
+        $opts = $this->netOpts();
         $mh = curl_multi_init();
         $hs = [];
         $bufs = [];
         foreach ($need as $id => $file) {
+            $t = Net::target($this->assetBase . $id, $opts);
+            if ($t === null) {
+                continue;
+            }
             $bufs[$id] = '';
-            $h = curl_init($this->assetBase . $id);
-            curl_setopt_array($h, $this->curlOpts($bufs[$id]));
+            $h = curl_init();
+            curl_setopt_array($h, Net::options($t, $bufs[$id], $opts));
             curl_multi_add_handle($mh, $h);
             $hs[$id] = $h;
         }
@@ -162,12 +154,20 @@ trait Assets {
             }
         } while ($running > 0);
         foreach ($hs as $id => $h) {
-            $code = curl_getinfo($h, CURLINFO_RESPONSE_CODE);
+            $code = (int)curl_getinfo($h, CURLINFO_RESPONSE_CODE);
+            $loc = (string)curl_getinfo($h, CURLINFO_REDIRECT_URL);
+            $body = null;
             if ($code >= 200 && $code < 300 && curl_errno($h) === 0 && strlen($bufs[$id]) <= self::MAX_ASSET_BYTES) {
+                $body = $bufs[$id];
+            } elseif ($code >= 300 && $code < 400 && $loc !== '') {
+                // redirects are followed one checked hop at a time
+                $body = Net::get($loc, ['redirects' => 3] + $opts);
+            }
+            if ($body !== null) {
                 if ($need[$id]) {
-                    @file_put_contents($need[$id], $bufs[$id], LOCK_EX);
+                    @file_put_contents($need[$id], $body, LOCK_EX);
                 }
-                $this->cache[$id] = $bufs[$id];
+                $this->cache[$id] = $body;
             }
             curl_multi_remove_handle($mh, $h);
             curl_close($h);
