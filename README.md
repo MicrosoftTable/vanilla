@@ -1,0 +1,99 @@
+<p align="center">
+  <img src="assets/icon.png" alt="vanilla" width="128" height="128">
+</p>
+
+<h1 align="center">vanilla</h1>
+
+<p align="center">
+  2012 style roblox avatar renders in plain php
+</p>
+
+<p align="center">
+  <img src="https://img.shields.io/badge/php-7.4%2B-777bb4?style=flat-square&logo=php&logoColor=white" alt="php 7.4+">
+</p>
+
+---
+
+renders 2012 style roblox avatars in php. you give it a charapp (or asset ids and body colors) and it gives you back a png. runs on regular shared hosting, no gpu or webgl or anything.
+
+## how it works
+
+you send a charapp link, it downloads the items from your asset host, builds the character and draws it in php, then sends back a png. renders get cached so the same avatar is instant after the first time (the first one takes about 0.5 to 2 seconds).
+
+## vs rccservice
+
+rccservice is roblox's real render server. you send it a soap request with a lua script and it runs the actual engine on a windows machine with a gpu.
+
+vanilla doesn't use any of that. there's no soap, no lua and no windows box, you just make a normal request and get an image back.
+
+## setup
+
+needs php 7.4+ with gd, curl and zlib.
+
+1. put the folder on your server
+2. set `assetBase` in `config.php` to your asset host (the id gets added to the end)
+3. make sure php can write to `cache/`
+
+now request a render:
+
+```
+avatar.php?charapp=https://yoursite.com/charapp&size=150x200
+```
+
+the charapp url is the link your site gives out for an avatar. vanilla fetches it and reads the list inside, which looks like this:
+
+```
+https://yoursite.com/bodycolors?a;https://yoursite.com/asset/?id=1234;https://yoursite.com/asset/?id=5678;
+```
+
+the first url is the bodycolors url, it gets fetched for the six body colors. every `asset/?id=` url after it is an item the avatar is wearing. everything is split by `;`. you can also pass that list straight into `charapp` instead of a link to it.
+
+the urls have to be on your `assetBase` host. if you need other hosts, add them to `allowedHosts` in `config.php`.
+
+if you don't have a bodycolors url you can pass `colors` yourself (`colors=f5cd30,0d69ac,...`, head, torso, left arm, right arm, left leg, right leg). if you pass both, `colors` wins.
+
+you can also skip the charapp and just use ids and colors:
+
+```
+avatar.php?ids=1234,5678&colors=f5cd30,0d69ac,f5cd30,f5cd30,a4bd47,a4bd47&size=150x200
+```
+
+| param | what it does |
+|---|---|
+| `charapp` | the charapp link (or the list itself). use this or `ids`, not both |
+| `ids` | up to 12 asset ids (shirts, pants, t-shirts, faces, hats, gear) |
+| `colors` | head, torso, left arm, right arm, left leg, right leg as `rrggbb` |
+| `size` | `150x200` (default), `180x220`, `100x100`, `352x352`, `420x420`, `150x150`, `48x48`. `x` and `y` work too |
+| `view` | `body` (default) or `head` for a headshot |
+| `smooth` | `1` (default) or `0` for hard edges |
+| `sid` | 16 to 32 hex chars. a new render with the same sid deletes the previous one |
+
+or from php:
+
+```php
+require 'src/Vanilla.php';
+$r = (new Vanilla\Avatar(['assetBase' => 'https://your.host/asset/?id=', 'cacheDir' => __DIR__ . '/cache']))
+    ->render(['charapp' => 'https://your.host/charapp', 'size' => '150x200']);
+file_put_contents('thumb.png', $r['png']);
+```
+
+## switching from rccservice to vanilla
+
+you already have the charapp you give rcc. instead of sending it to rcc, put it in the `charapp` param of `avatar.php` and use the png you get back. save it or put the url in an `<img>`.
+
+## what's where
+
+```
+avatar.php            the endpoint, reads the request and sends back the png
+config.php            your settings
+src/Vanilla.php       the renderer, render() is the entry point
+src/CharApp.php       reads charapp links and lists
+src/parts/            the renderer split by job (assets, meshes, look building, particles, scene, rasterisers)
+src/Rbxm.php          reads roblox models (xml and binary)
+src/Img.php           image decoding and drawing
+data/                 the body meshes and textures
+```
+
+## license
+
+[Hippocratic License 3.0](LICENSE). you can use and change vanilla freely, but not to harm people (human rights, discrimination, forced labor and so on), and anyone who breaks that loses the license. the models and textures in `data/` come from the original client and aren't covered by it.

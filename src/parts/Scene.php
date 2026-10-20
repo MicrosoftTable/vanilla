@@ -1,0 +1,320 @@
+<?php
+namespace Vanilla;
+
+// camera lighting and the draw calls for one look
+trait Scene {
+    private function draw(array $look, int $W, int $H, int $SS, string $view = 'body'): string {
+        $base = $this->base();
+        $cfs = self::partCFs((bool)$look['tool']);
+        $items = [];
+        foreach ($look['accessories'] as $acc) {
+            $h = self::handleOf($acc);
+            if ($h) {
+                $it = $this->buildHandleDrawable($h, self::accessoryCF($acc, $h, $cfs), $look['notes']);
+                if ($it) {
+                    $items[] = $it;
+                }
+            }
+        }
+        $nHats = count($items);
+        if ($look['tool']) {
+            $th = self::handleOf($look['tool']);
+            if ($th) {
+                $it = $this->buildHandleDrawable(
+                    $th,
+                    self::cfMul(
+                        self::cfMul($cfs['Right Arm'], self::RIGHT_GRIP_C0()),
+                        self::cfInv(self::gripCF($look['tool']))
+                    ),
+                    $look['notes']
+                );
+                if ($it) {
+                    $items[] = $it;
+                }
+            }
+        }
+        $faceImg = $look['face'] ?: $base['face'];
+        $Wss = $W * $SS;
+        $Hss = $H * $SS;
+
+        $ndcOf = function (array $vp, array $p): ?array {
+            $w = $vp[3] * $p[0] + $vp[7] * $p[1] + $vp[11] * $p[2] + $vp[15];
+            if ($w <= 1e-6) {
+                return null;
+            }
+            return [
+                ($vp[0] * $p[0] + $vp[4] * $p[1] + $vp[8] * $p[2] + $vp[12]) / $w,
+                ($vp[1] * $p[0] + $vp[5] * $p[1] + $vp[9] * $p[2] + $vp[13]) / $w
+            ];
+        };
+        if ($view === 'head') {
+            $hp = $cfs['Head']['p'];
+            $center = [$hp[0], $hp[1] + self::HEAD_AIM, $hp[2]];
+            $fov = self::HEAD_FOV * M_PI / 180;
+            $dist = self::HEAD_DIST;
+            $cd = self::norm(self::HEAD_DIR);
+            $eye = [$center[0] + $cd[0] * $dist, $center[1] + $cd[1] * $dist, $center[2] + $cd[2] * $dist];
+            $vp = self::mul4(self::perspective($fov, $W / $H, 0.05, 200), self::lookAt($eye, $center, [0, 1, 0]));
+            $m = 0;
+            foreach (array_slice($items, 0, $nHats) as $it) {
+                foreach ($it['geom']['pos'] as $p) {
+                    $q = $ndcOf($vp, self::cfApply($it['cf'], $p));
+                    if ($q) {
+                        $m = max($m, abs($q[0]), abs($q[1]));
+                    }
+                }
+            }
+            if ($m > 0.96) {
+                $s = max(1 / self::HEAD_MAXOUT, 0.96 / $m);
+                $vp = self::mul4([$s, 0, 0, 0, 0, $s, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1], $vp);
+            }
+        } else {
+            $lo = [1e9, 1e9, 1e9];
+            $hi = [-1e9, -1e9, -1e9];
+            $addBox = function ($cf, $size) use (&$lo, &$hi) {
+                for ($sx = -1; $sx <= 1; $sx += 2) {
+                    for ($sy = -1; $sy <= 1; $sy += 2) {
+                        for ($sz = -1; $sz <= 1; $sz += 2) {
+                            $q = self::cfApply($cf, [$sx * $size[0] / 2, $sy * $size[1] / 2, $sz * $size[2] / 2]);
+                            for ($k = 0; $k < 3; $k++) {
+                                $lo[$k] = min($lo[$k], $q[$k]);
+                                $hi[$k] = max($hi[$k], $q[$k]);
+                            }
+                        }
+                    }
+                }
+            };
+            $addBox($cfs['Torso'], [2, 2, 1]);
+            $addBox($cfs['Head'], [2, 1, 1]);
+            foreach (['Left Arm', 'Right Arm', 'Left Leg', 'Right Leg'] as $n) {
+                $addBox($cfs[$n], [1, 2, 1]);
+            }
+            foreach ($items as $it) {
+                $addBox($it['cf'], $it['size']);
+            }
+            $center = [($lo[0] + $hi[0]) / 2, ($lo[1] + $hi[1]) / 2, ($lo[2] + $hi[2]) / 2];
+            $radius = sqrt(($hi[0] - $lo[0]) ** 2 + ($hi[1] - $lo[1]) ** 2 + ($hi[2] - $lo[2]) ** 2) / 2;
+            $fov = self::CAM_FOV * M_PI / 180;
+            $dist = self::CAM_ZOOM * $radius / tan($fov / 2);
+            $cd = self::norm(self::CAM_DIR);
+            $eye = [$center[0] + $cd[0] * $dist, $center[1] + $cd[1] * $dist, $center[2] + $cd[2] * $dist];
+            $vp = self::mul4(self::perspective($fov, $W / $H, 0.1, 200), self::lookAt($eye, $center, [0, 1, 0]));
+
+            $nx0 = 1e9;
+            $nx1 = -1e9;
+            $ny0 = 1e9;
+            $ny1 = -1e9;
+            $ndc = function ($p) use ($vp, &$nx0, &$nx1, &$ny0, &$ny1) {
+                $x = $vp[0] * $p[0] + $vp[4] * $p[1] + $vp[8] * $p[2] + $vp[12];
+                $y = $vp[1] * $p[0] + $vp[5] * $p[1] + $vp[9] * $p[2] + $vp[13];
+                $w = $vp[3] * $p[0] + $vp[7] * $p[1] + $vp[11] * $p[2] + $vp[15];
+                if ($w <= 1e-6) {
+                    return;
+                }
+                $x /= $w;
+                $y /= $w;
+                if ($x < $nx0) {
+                    $nx0 = $x;
+                }
+                if ($x > $nx1) {
+                    $nx1 = $x;
+                }
+                if ($y < $ny0) {
+                    $ny0 = $y;
+                }
+                if ($y > $ny1) {
+                    $ny1 = $y;
+                }
+            };
+            $boxPts = function ($cf, $size) use ($ndc) {
+                for ($sx = -1; $sx <= 1; $sx += 2) {
+                    for ($sy = -1; $sy <= 1; $sy += 2) {
+                        for ($sz = -1; $sz <= 1; $sz += 2) {
+                            $ndc(self::cfApply($cf, [$sx * $size[0] / 2, $sy * $size[1] / 2, $sz * $size[2] / 2]));
+                        }
+                    }
+                }
+            };
+            $boxPts($cfs['Torso'], [2, 2, 1]);
+            foreach (['Left Arm', 'Right Arm', 'Left Leg', 'Right Leg'] as $n) {
+                $boxPts($cfs[$n], [1, 2, 1]);
+            }
+            foreach ($base['head']['pos'] as $p) {
+                $ndc(self::cfApply($cfs['Head'], $p));
+            }
+            foreach ($items as $it) {
+                foreach ($it['geom']['pos'] as $p) {
+                    $ndc(self::cfApply($it['cf'], $p));
+                }
+            }
+            if ($nx1 > $nx0) {
+                $s = min(1, 0.94 / max(($nx1 - $nx0) / 2, ($ny1 - $ny0) / 2));
+                $tx = -$s * ($nx0 + $nx1) / 2;
+                $ty = -$s * ($ny0 + $ny1) / 2;
+                $vp = self::mul4([$s, 0, 0, 0, 0, $s, 0, 0, 0, 0, 1, 0, $tx, $ty, 0, 1], $vp);
+            }
+        }
+
+        [$upTex, $loTex] = self::paintSheets($look, $base['inlet']);
+        $studs = $look['shirt'] ? false : true;
+        $hb = $base['headBox'];
+        $fb = self::FACE_BOX;
+        $fs = ($hb['hi'][0] - $hb['lo'][0]) / 2;
+        $faceBox = [($fb[0] - $fb[2]) * $fs, ($fb[0] + $fb[2]) * $fs, ($fb[1] - $fb[3]) * $fs, ($fb[1] + $fb[3]) * $fs];
+        $calls = [
+            [$base['torso'], $cfs['Torso'], 1, null, $upTex, $studs, [1, 1, 0.5]],
+            [$base['rightArm'], $cfs['Right Arm'], 1, null, $upTex, $studs, [0.5, 1, 0.5]],
+            [$base['leftArm'], $cfs['Left Arm'], 1, null, $upTex, $studs, [0.5, 1, 0.5]],
+            [$base['rightLeg'], $cfs['Right Leg'], 1, null, $loTex, false, null],
+            [$base['leftLeg'], $cfs['Left Leg'], 1, null, $loTex, false, null],
+            [$base['head'], $cfs['Head'], 2, $look['colors']['head'], new Texture($faceImg), false, null],
+        ];
+        foreach ($items as $it) {
+            if ($it['tex']) {
+                $calls[] = [$it['geom'], $it['cf'], 3, null, $it['tex'], false, null, $it['tint']];
+            } else {
+                $calls[] = [
+                    $it['geom'],
+                    $it['cf'],
+                    0,
+                    [
+                        $it['color'][0] * $it['tint'][0],
+                        $it['color'][1] * $it['tint'][1],
+                        $it['color'][2] * $it['tint'][2]
+                    ],
+                    null,
+                    false,
+                    null
+                ];
+            }
+        }
+        $tris = [];
+        foreach ($calls as $c) {
+            $this->setup($tris, $c, $vp, $eye, $Wss, $Hss, $faceBox);
+        }
+        $cz = self::norm(self::sub($eye, $center));
+        $cx = self::norm(self::cross([0, 1, 0], $cz));
+        $cy = self::cross($cz, $cx);
+        foreach (self::fxBuild($items, $eye) as $sys) {
+            $this->setupFx($tris, $sys, $base['fx'][$sys['mat']], $vp, $cx, $cy, $Wss, $Hss);
+        }
+        $fast = !$this->exact;
+        if ($fast && $SS === 1) {
+            foreach ($tris as $T) {
+                if ($T['mode'] === 4) {
+                    $fast = false;
+                    break;
+                }
+            }
+        }
+        return $fast ? $this->rasteriseFast($tris, $W, $H, $SS, $base['stud'], $faceBox) : $this->rasterise(
+            $tris,
+            $W,
+            $H,
+            $SS,
+            $base['stud'],
+            $faceBox
+        );
+    }
+
+    private function setup(array &$tris, array $call, array $vp, array $eye, int $Wss, int $Hss, array $faceBox): void {
+        [$g, $cf, $mode, $color, $tex, $studs, $half] = $call;
+        $tint = $call[7] ?? [1, 1, 1];
+        $R = $cf['R'];
+        $t = $cf['p'];
+        $L = self::LAMP_DIR;
+        $n = count($g['pos']);
+        $V = [];
+        for ($i = 0; $i < $n; $i++) {
+            $p = $g['pos'][$i];
+            $nn = $g['nrm'][$i];
+            $wx = $R[0] * $p[0] + $R[1] * $p[1] + $R[2] * $p[2] + $t[0];
+            $wy = $R[3] * $p[0] + $R[4] * $p[1] + $R[5] * $p[2] + $t[1];
+            $wz = $R[6] * $p[0] + $R[7] * $p[1] + $R[8] * $p[2] + $t[2];
+            $N = self::norm(
+                [
+                    $R[0] * $nn[0] + $R[1] * $nn[1] + $R[2] * $nn[2],
+                    $R[3] * $nn[0] + $R[4] * $nn[1] + $R[5] * $nn[2],
+                    $R[6] * $nn[0] + $R[7] * $nn[1] + $R[8] * $nn[2]
+                ]
+            );
+            $ndl = $N[0] * $L[0] + $N[1] * $L[1] + $N[2] * $L[2];
+            $Vd = self::norm([$eye[0] - $wx, $eye[1] - $wy, $eye[2] - $wz]);
+            $Hh = self::norm([$Vd[0] + $L[0], $Vd[1] + $L[1], $Vd[2] + $L[2]]);
+            $nh = $N[0] * $Hh[0] + $N[1] * $Hh[1] + $N[2] * $Hh[2];
+            $spec = ($nh > 0 ? $nh ** self::SPEC_EXP : 0.0) * ($ndl >= 0 ? 1 : 0);
+            $cx = $vp[0] * $wx + $vp[4] * $wy + $vp[8] * $wz + $vp[12];
+            $cy = $vp[1] * $wx + $vp[5] * $wy + $vp[9] * $wz + $vp[13];
+            $cz = $vp[2] * $wx + $vp[6] * $wy + $vp[10] * $wz + $vp[14];
+            $cw = $vp[3] * $wx + $vp[7] * $wy + $vp[11] * $wz + $vp[15];
+            $vy = [max($ndl, 0.0), max(-$ndl, 0.0), $spec];
+            if ($mode === 1 || $mode === 3) {
+                $vy[] = $g['uv'][$i][0];
+                $vy[] = $g['uv'][$i][1];
+            }
+            if ($mode === 1 && $studs) {
+                $vy[] = $p[0];
+                $vy[] = $p[1];
+                $vy[] = $p[2];
+                $vy[] = $nn[1];
+            }
+            if ($mode === 2) {
+                $vy[] = $p[0];
+                $vy[] = $p[1];
+                $vy[] = $nn[2];
+            }
+            $V[] = [$cx, $cy, $cz, $cw, $vy];
+        }
+        $nv = count($V[0][4]);
+        $snap = 1 << $this->subpixelBits;
+        for ($i = 0; $i + 2 < $n; $i += 3) {
+            $a = $V[$i];
+            $b = $V[$i + 1];
+            $c = $V[$i + 2];
+            if ($a[3] <= 1e-6 || $b[3] <= 1e-6 || $c[3] <= 1e-6) {
+                continue;
+            }
+            $S = [];
+            foreach ([$a, $b, $c] as $v) {
+                $iw = 1 / $v[3];
+                $sx = ($v[0] * $iw + 1) * 0.5 * $Wss;
+                $sy = (1 - ($v[1] * $iw + 1) * 0.5) * $Hss;
+                $sx = round($sx * $snap) / $snap;
+                $sy = round($sy * $snap) / $snap;
+                $S[] = [$sx, $sy, ($v[2] * $iw + 1) * 0.5, $iw, $v[4]];
+            }
+            [$x0, $y0] = $S[0];
+            [$x1, $y1] = $S[1];
+            [$x2, $y2] = $S[2];
+            $area = ($x1 - $x0) * ($y2 - $y0) - ($x2 - $x0) * ($y1 - $y0);
+            if (!($area < 0)) {
+                continue;
+            }
+            $d0 = ($x2 - $x1) * ($y0 - $y1) - ($y2 - $y1) * ($x0 - $x1);
+            $d1 = ($x0 - $x2) * ($y1 - $y2) - ($y0 - $y2) * ($x1 - $x2);
+            if ($d0 == 0 || $d1 == 0) {
+                continue;
+            }
+            $a0 = -($y2 - $y1) / $d0;
+            $b0 = ($x2 - $x1) / $d0;
+            $c0 = (($y2 - $y1) * $x1 - ($x2 - $x1) * $y1) / $d0;
+            $a1 = -($y0 - $y2) / $d1;
+            $b1 = ($x0 - $x2) / $d1;
+            $c1 = (($y0 - $y2) * $x2 - ($x0 - $x2) * $y2) / $d1;
+            $plane = function ($f0, $f1, $f2) use ($a0, $b0, $c0, $a1, $b1, $c1) {
+                $e0 = $f0 - $f2;
+                $e1 = $f1 - $f2;
+                return [$a0 * $e0 + $a1 * $e1, $b0 * $e0 + $b1 * $e1, $f2 + $c0 * $e0 + $c1 * $e1];
+            };
+            $P = [$plane($S[0][3], $S[1][3], $S[2][3]), $plane($S[0][2], $S[1][2], $S[2][2])];
+            for ($k = 0; $k < $nv; $k++) {
+                $P[] = $plane($S[0][4][$k] * $S[0][3], $S[1][4][$k] * $S[1][3], $S[2][4][$k] * $S[2][3]);
+            }
+            $tris[] = [
+                'bx0' => max(0, (int)ceil(min($x0, $x1, $x2) - 0.5)), 'bx1' => min($Wss - 1, (int)floor(max($x0, $x1, $x2) - 0.5)),
+                'by0' => max(0, (int)ceil(min($y0, $y1, $y2) - 0.5)), 'by1' => min($Hss - 1, (int)floor(max($y0, $y1, $y2) - 0.5)),
+                'e' => [$a0, $b0, $c0, $a1, $b1, $c1], 'P' => $P, 'mode' => $mode, 'color' => $color, 'tex' => $tex, 'studs' => $studs, 'half' => $half, 'tint' => $tint,
+            ];
+        }
+    }
+}
