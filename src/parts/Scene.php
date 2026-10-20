@@ -5,7 +5,14 @@ namespace Vanilla;
 trait Scene {
     private function draw(array &$look, int $W, int $H, int $SS, string $view = 'body'): string {
         $base = $this->base();
-        if ($this->renderer === '2016') { $base = $this->characterBase2016($base, $look); }
+        $only = $look['only'];
+        $partTex = [];
+        $headTex = null;
+        if ($this->renderer === '2016') {
+            $base = $this->characterBase2016($base, $look);
+        } else {
+            [$base, $partTex, $headTex] = $this->characterBase2012($base, $look);
+        }
         $cfs = self::partCFs((bool)$look['tool'], $this->renderer === '2016' ? 1.57 : M_PI / 2);
         $items = [];
         foreach ($look['accessories'] as $acc) {
@@ -34,6 +41,9 @@ trait Scene {
                 }
             }
         }
+        if ($only === 'items' && !$items) {
+            throw new \RuntimeException('the item could not be drawn');
+        }
         $faceImg = $look['face'] ?: $base['face'];
         $Wss = $W * $SS;
         $Hss = $H * $SS;
@@ -49,7 +59,7 @@ trait Scene {
             ];
         };
         if ($this->renderer === '2016' && $view === 'body') {
-            $camera = self::thumbnailCamera2016(self::sceneBounds2016($base, $cfs, $items), $W, $H, false, self::sceneBounds2016($base, $cfs, $items, true));
+            $camera = self::thumbnailCamera2016(self::sceneBounds2016($base, $cfs, $items, false, $only), $W, $H, (bool)$only, self::sceneBounds2016($base, $cfs, $items, true, $only));
             $vp = $camera['vp']; $eye = $camera['eye']; $center = $camera['center'];
         } elseif ($view === 'head') {
             $hp = $cfs['Head']['p'];
@@ -88,9 +98,13 @@ trait Scene {
                     }
                 }
             };
-            $addBox($cfs['Torso'], [2, 2, 1]);
-            $addBox($cfs['Head'], [2, 1, 1]);
-            foreach (['Left Arm', 'Right Arm', 'Left Leg', 'Right Leg'] as $n) {
+            if (!$only) {
+                $addBox($cfs['Torso'], [2, 2, 1]);
+            }
+            if ($only !== 'items') {
+                $addBox($cfs['Head'], [2, 1, 1]);
+            }
+            foreach ($only ? [] : ['Left Arm', 'Right Arm', 'Left Leg', 'Right Leg'] as $n) {
                 $addBox($cfs[$n], [1, 2, 1]);
             }
             foreach ($items as $it) {
@@ -139,11 +153,13 @@ trait Scene {
                     }
                 }
             };
-            $boxPts($cfs['Torso'], [2, 2, 1]);
-            foreach (['Left Arm', 'Right Arm', 'Left Leg', 'Right Leg'] as $n) {
+            if (!$only) {
+                $boxPts($cfs['Torso'], [2, 2, 1]);
+            }
+            foreach ($only ? [] : ['Left Arm', 'Right Arm', 'Left Leg', 'Right Leg'] as $n) {
                 $boxPts($cfs[$n], [1, 2, 1]);
             }
-            foreach ($base['head']['pos'] as $p) {
+            foreach ($only === 'items' ? [] : $base['head']['pos'] as $p) {
                 $ndc(self::cfApply($cfs['Head'], $p));
             }
             foreach ($items as $it) {
@@ -152,7 +168,10 @@ trait Scene {
                 }
             }
             if ($nx1 > $nx0) {
-                $s = min(1, 0.94 / max(($nx1 - $nx0) / 2, ($ny1 - $ny0) / 2));
+                $s = 0.94 / max(($nx1 - $nx0) / 2, ($ny1 - $ny0) / 2);
+                if (!$only) {
+                    $s = min(1, $s);
+                }
                 $tx = -$s * ($nx0 + $nx1) / 2;
                 $ty = -$s * ($ny0 + $ny1) / 2;
                 $vp = self::mul4([$s, 0, 0, 0, 0, $s, 0, 0, 0, 0, 1, 0, $tx, $ty, 0, 1], $vp);
@@ -181,6 +200,22 @@ trait Scene {
         if ($this->renderer === '2016') {
             foreach (['torso', 'rightArm', 'leftArm', 'rightLeg', 'leftLeg'] as $i => $part) { $calls[$i][4] = $bodyTextures2016[$part]; }
             $calls[5] = [$base['head'], $cfs['Head'], 3, null, $headTexture2016, false, null];
+        }
+        foreach ($partTex as $part => $t) {
+            $i = ['torso' => 0, 'rightArm' => 1, 'leftArm' => 2, 'rightLeg' => 3, 'leftLeg' => 4][$part];
+            if ($t) {
+                $calls[$i] = [$base[$part], $calls[$i][1], 3, null, $t, false, null];
+            } else {
+                $calls[$i] = [$base[$part], $calls[$i][1], 0, $look['colors'][$part], null, false, null];
+            }
+        }
+        if ($headTex) {
+            $calls[5] = [$base['head'], $cfs['Head'], 3, null, $headTex, false, null];
+        }
+        if ($only === 'items') {
+            $calls = [];
+        } elseif ($only === 'head') {
+            $calls = [$calls[5]];
         }
         foreach ($items as $it) {
             if ($it['tex']) {

@@ -116,6 +116,27 @@ trait Assets {
         return array_values($out);
     }
 
+    // fetches the assets and then the meshes and images they point at, a few rounds deep
+    function loadWaves(array $ids): void {
+        $wave = $ids;
+        for ($round = 0; $round < 3 && $wave; $round++) {
+            $this->prefetch($wave);
+            $next = [];
+            foreach ($wave as $id) {
+                $b = $this->cache[self::parseId($id) ?? ''] ?? null;
+                if ($b === null || Img::isImageBytes($b)) {
+                    continue;
+                }
+                foreach (self::referencedIds($b) as $r) {
+                    if (!array_key_exists($r, $this->cache)) {
+                        $next[$r] = $r;
+                    }
+                }
+            }
+            $wave = array_slice(array_values($next), 0, 24);
+        }
+    }
+
     function prefetch(array $ids): void {
         if ($this->fetcher || !function_exists('curl_multi_init')) {
             return;

@@ -336,7 +336,7 @@ trait LookBuilder {
 
     private static function emptyLook(): array {
         return ['colors' => ['head' => self::brick(24), 'torso' => self::brick(23), 'leftArm' => self::brick(24), 'rightArm' => self::brick(24), 'leftLeg' => self::brick(119), 'rightLeg' => self::brick(119)],
-            'headMesh' => null, 'bodyMeshes' => [], 'shirt' => null, 'pants' => null, 'tshirt' => null, 'face' => null, 'faceSet' => false, 'accessories' => [], 'tool' => null, 'notes' => []];
+            'headMesh' => null, 'bodyMeshes' => [], 'shirt' => null, 'pants' => null, 'tshirt' => null, 'face' => null, 'faceSet' => false, 'accessories' => [], 'tool' => null, 'only' => '', 'notes' => []];
     }
 
     private function absorbTree(array &$look, array $tree, string $tag): void {
@@ -357,12 +357,16 @@ trait LookBuilder {
             }
             foreach ($list as $x) {
                 $P = $x->props;
-                if ($this->renderer === '2016' && $x->cls === 'CharacterMesh') {
-                    $names = [1 => 'torso', 2 => 'leftArm', 3 => 'rightArm', 4 => 'leftLeg', 5 => 'rightLeg',
-                        'Torso' => 'torso', 'LeftArm' => 'leftArm', 'RightArm' => 'rightArm', 'LeftLeg' => 'leftLeg', 'RightLeg' => 'rightLeg'];
+                // bundles carry an r6 and an r15 version and only r6 is drawn
+                if (preg_match('/^r15/i', (string)$x->name) && !in_array($x->cls, ['Hat', 'Accessory', 'Accoutrement', 'Tool'], true)) {
+                    continue;
+                }
+                if ($x->cls === 'CharacterMesh') {
+                    $names = [0 => 'head', 1 => 'torso', 2 => 'leftArm', 3 => 'rightArm', 4 => 'leftLeg', 5 => 'rightLeg',
+                        'Head' => 'head', 'Torso' => 'torso', 'LeftArm' => 'leftArm', 'RightArm' => 'rightArm', 'LeftLeg' => 'leftLeg', 'RightLeg' => 'rightLeg'];
                     $key = $names[$P['BodyPart'] ?? 0] ?? null;
                     if ($key) { $look['bodyMeshes'][$key] = $x; }
-                } elseif ($this->renderer === '2016' && in_array($x->cls, ['SpecialMesh', 'CylinderMesh', 'BlockMesh', 'FileMesh'], true)) {
+                } elseif (in_array($x->cls, ['SpecialMesh', 'CylinderMesh', 'BlockMesh', 'FileMesh'], true)) {
                     $look['headMesh'] = $x;
                 } elseif ($x->cls === 'Shirt') {
                     $im = $template($this->image($P['ShirtTemplate']['url'] ?? null), 'shirt');

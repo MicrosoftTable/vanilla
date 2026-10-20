@@ -5,13 +5,13 @@ foreach (['BrickColors', 'Net', 'Inst', 'Rbxm', 'Img', 'PngStream', 'Texture', '
     require_once __DIR__ . '/' . $file . '.php';
 }
 
-foreach (['RenderProfiles', 'Character2016', 'Particles2016', 'Geometry', 'Assets', 'Meshes', 'LookBuilder', 'Particles', 'Scene', 'FastRaster', 'ReferenceRaster'] as $part) {
+foreach (['RenderProfiles', 'Character2016', 'Particles2016', 'Geometry', 'Assets', 'Meshes', 'LookBuilder', 'Particles', 'ItemRender', 'Scene', 'FastRaster', 'ReferenceRaster'] as $part) {
     require_once __DIR__ . '/parts/' . $part . '.php';
 }
 
 // vanilla is a software renderer in plain php with no gpu and no webgl and no rcc
 final class Avatar {
-    use RenderProfiles, Character2016, Particles2016, Geometry, Assets, Meshes, LookBuilder, Particles, Scene, FastRaster, ReferenceRaster;
+    use RenderProfiles, Character2016, Particles2016, Geometry, Assets, Meshes, LookBuilder, Particles, ItemRender, Scene, FastRaster, ReferenceRaster;
 
     const TPL_W = 585, TPL_H = 559;
     // where each face of each body part sits on the 585x559 clothing template: x, y, width, height
@@ -120,6 +120,12 @@ final class Avatar {
 
     function render(array $req): array {
         $this->selectRenderer($req['renderer'] ?? $this->defaultRenderer);
+        if (isset($req['item'])) {
+            if (!empty($req['ids']) || isset($req['charapp'])) {
+                throw new \InvalidArgumentException('use item on its own');
+            }
+            return $this->renderItem($req);
+        }
         if (isset($req['charapp'])) {
             if (!empty($req['ids'])) {
                 throw new \InvalidArgumentException('use charapp or ids and not both');
@@ -160,23 +166,7 @@ final class Avatar {
         if (!$size) {
             throw new \InvalidArgumentException('Unknown size.');
         }
-        $wave = $ids;
-        for ($round = 0; $round < 3 && $wave; $round++) {
-            $this->prefetch($wave);
-            $next = [];
-            foreach ($wave as $id) {
-                $b = $this->cache[self::parseId($id) ?? ''] ?? null;
-                if ($b === null || Img::isImageBytes($b)) {
-                    continue;
-                }
-                foreach (self::referencedIds($b) as $r) {
-                    if (!array_key_exists($r, $this->cache)) {
-                        $next[$r] = $r;
-                    }
-                }
-            }
-            $wave = array_slice(array_values($next), 0, 24);
-        }
+        $this->loadWaves($ids);
         foreach ($ids as $id) {
             $this->addAsset($look, $id);
         }

@@ -258,7 +258,7 @@ trait Character2016 {
         return ['vp' => $vp, 'eye' => $eye, 'center' => $center, 'distance' => $distance, 'bounds' => $bounds];
     }
 
-    private static function sceneBounds2016(array $base, array $cfs, array $items, bool $physical = false): array {
+    private static function sceneBounds2016(array $base, array $cfs, array $items, bool $physical = false, string $only = ''): array {
         $lo = [INF, INF, INF]; $hi = [-INF, -INF, -INF];
         $add = function (array $geometry, array $frame) use (&$lo, &$hi) {
             // The engine transforms each drawable's LOCAL mesh AABB, then unions it.
@@ -269,6 +269,9 @@ trait Character2016 {
             } } }
         };
         foreach (['head' => 'Head', 'torso' => 'Torso', 'leftArm' => 'Left Arm', 'rightArm' => 'Right Arm', 'leftLeg' => 'Left Leg', 'rightLeg' => 'Right Leg'] as $key => $name) {
+            if ($only === 'items' || ($only === 'head' && $key !== 'head')) {
+                continue;
+            }
             if ($physical) {
                 $size = $key === 'head' ? [2, 1, 1] : ($key === 'torso' ? [2, 2, 1] : [1, 2, 1]);
                 $geometry = ['pos' => [[$size[0] / -2, $size[1] / -2, $size[2] / -2], [$size[0] / 2, $size[1] / 2, $size[2] / 2]]];

@@ -1,11 +1,11 @@
 <?php
-// get avatar.php with charapp or ids, colors, size, view, smooth, renderer, format, bg and sid
+// get avatar.php with charapp or ids or item, colors, size, view, smooth, renderer, format, bg and sid
 declare(strict_types=1);
 umask(0077);
 require __DIR__ . '/src/Vanilla.php';
 $config = require __DIR__ . '/config.php';
 
-const RENDER_VERSION = 'vanilla-1.4-2016-lighting';
+const RENDER_VERSION = 'vanilla-1.5-items';
 
 function fail(int $code, string $msg): void {
     http_response_code($code);
@@ -28,6 +28,16 @@ foreach ($q as $k => $v) {
     }
 }
 // every input is a plain string checked against a strict pattern
+$item = null;
+if (isset($q['item']) && $q['item'] !== '') {
+    if (!preg_match('/^[1-9]\d{0,17}$/D', $q['item'])) {
+        fail(400, 'item is a number.');
+    }
+    if (($q['ids'] ?? '') !== '' || ($q['charapp'] ?? '') !== '') {
+        fail(400, 'Use item on its own.');
+    }
+    $item = $q['item'];
+}
 $idsRaw = trim($q['ids'] ?? '');
 $ids = $idsRaw === '' ? [] : preg_split('/\s*,\s*/', $idsRaw);
 foreach ($ids as $id) {
@@ -119,10 +129,10 @@ if (!is_dir($cacheDir)) {
 // a finished render for exactly this request is reused
 $key = hash(
     'sha256',
-    RENDER_VERSION . '|' . implode(',', $ids) . '|' . implode(
+    RENDER_VERSION . '|' . ($item !== null ? 'item' . $item : implode(',', $ids) . '|' . implode(
         ',',
         $colors ?? Vanilla\Avatar::DEFAULT_COLORS
-    ) . '|' . $size . '|' . ($smooth ? 's' : 'h') . '|' . $view . '|' . $renderer . '|' . $format . ($format === 'jpg' ? '|' . $bg : '')
+    ) . '|' . $view) . '|' . $size . '|' . ($smooth ? 's' : 'h') . '|' . $renderer . '|' . $format . ($format === 'jpg' ? '|' . $bg : '')
 );
 $file = "$cacheDir/render-$key.$format";
 $etag = '"' . substr($key, 0, 32) . '"';
@@ -256,7 +266,9 @@ try {
         'allowPrivateHosts' => !empty($config['allowPrivateHosts']),
         'cacheDir' => $cacheDir,
     ]);
-    $r = $avatar->render(['ids' => $ids, 'colors' => $colors, 'size' => $size, 'smooth' => $smooth, 'view' => $view, 'renderer' => $renderer]);
+    $r = $avatar->render($item !== null
+        ? ['item' => $item, 'size' => $size, 'smooth' => $smooth, 'renderer' => $renderer]
+        : ['ids' => $ids, 'colors' => $colors, 'size' => $size, 'smooth' => $smooth, 'view' => $view, 'renderer' => $renderer]);
 } catch (InvalidArgumentException $e) {
     fail(400, $e->getMessage());
 } catch (Throwable $e) {

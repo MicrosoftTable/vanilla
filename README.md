@@ -61,6 +61,7 @@ avatar.php?ids=1234,5678&colors=f5cd30,0d69ac,f5cd30,f5cd30,a4bd47,a4bd47&size=1
 | param | what it does |
 |---|---|
 | `charapp` | the charapp link (or the list itself). use this or `ids`, not both |
+| `item` | one asset id, rendered on its own, see below. use it instead of `charapp` and `ids` |
 | `ids` | up to 12 asset ids (shirts, pants, t-shirts, faces, hats, gear) |
 | `colors` | head, torso, left arm, right arm, left leg, right leg as `rrggbb` |
 | `size` | `150x200` (default), `180x220`, `100x100`, `352x352`, `420x420`, `512x512`, `150x150`, `48x48`. `x` and `y` work too |
@@ -70,6 +71,23 @@ avatar.php?ids=1234,5678&colors=f5cd30,0d69ac,f5cd30,f5cd30,a4bd47,a4bd47&size=1
 | `bg` | background colour for jpg as hex, `ffffff` by default |
 | `smooth` | `1` (default) or `0` for hard edges |
 | `sid` | 16 to 32 hex chars. a new render with the same sid deletes the previous one |
+
+### rendering a single item
+
+`item` renders one asset by itself, same lighting and camera as the avatar renders:
+
+```
+avatar.php?item=1234&size=420x420
+```
+
+| item | what you get |
+|---|---|
+| hat, accessory, gear | the item alone, framed to fit |
+| head, face | the head alone |
+| shirt, pants, t-shirt | a gray avatar wearing it |
+| package (old id list or the newer r6/r15 bundle) | a full avatar in the package, r6 only |
+
+anything else (bare images, models without one of the above) is refused.
 
 or from php:
 
