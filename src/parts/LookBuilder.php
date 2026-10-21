@@ -288,6 +288,7 @@ trait LookBuilder {
                 $m = self::plainBox($size[0] / 2, $size[1] / 2, $size[2] / 2);
             }
         } catch (\Throwable $e) {
+            $notes[] = 'an item mesh could not be loaded' . ($meshUrl ? ' (' . substr((string)$meshUrl, 0, 60) . ')' : '');
             return null;
         }
         $tex = $texUrl ? $this->image($texUrl, 0, true) : null;

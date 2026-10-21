@@ -17,6 +17,9 @@ trait Scene {
         $items = [];
         foreach ($look['accessories'] as $acc) {
             $h = self::handleOf($acc);
+            if (!$h) {
+                $look['notes'][] = 'a hat has no Handle part so it was skipped';
+            }
             if ($h) {
                 $it = $this->buildHandleDrawable($h, $this->accessoryFrame($acc, $h, $cfs), $look['notes']);
                 if ($it) {
@@ -27,6 +30,9 @@ trait Scene {
         $nHats = count($items);
         if ($look['tool']) {
             $th = self::handleOf($look['tool']);
+            if (!$th) {
+                $look['notes'][] = 'the gear has no Handle part so it was skipped';
+            }
             if ($th) {
                 $it = $this->buildHandleDrawable(
                     $th,
