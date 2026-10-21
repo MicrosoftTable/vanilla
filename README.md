@@ -146,4 +146,4 @@ data/                 the body meshes and textures
 
 ## license
 
-[Hippocratic License 3.0](LICENSE). you can use and change vanilla freely, but not to harm people (human rights, discrimination, forced labor and so on), and anyone who breaks that loses the license. the models and textures in `data/` come from the original client and aren't covered by it.
+[GNU General Public License v3.0](LICENSE). you can use, change and share vanilla freely, as long as anything you distribute that's based on it is also released under the GPLv3 with its source available. the models and textures in `data/` come from the original client and aren't covered by it.
