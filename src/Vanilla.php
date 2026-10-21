@@ -72,6 +72,7 @@ final class Avatar {
     private $cacheDir;
     private $fetcher;
     private $cache = [];
+    private $content = [];
     private static $base = null;
     private $exact = false;
 

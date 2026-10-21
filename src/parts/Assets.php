@@ -201,8 +201,58 @@ trait Assets {
     }
 
     function bytes($ref): ?string {
+        if (self::isContent($ref)) {
+            return $this->contentBytes($ref);
+        }
         $id = self::assetId($ref);
         return $id ? $this->fetch($id) : null;
+    }
+
+    static function isContent($ref): bool {
+        return is_string($ref) && stripos($ref, 'rbxasset://') === 0;
+    }
+
+    // rbxasset:// is rewritten to the asset url: a number is an asset id and a path is added after the asset base
+    private function contentBytes(string $ref): ?string {
+        if (array_key_exists($ref, $this->content)) {
+            return $this->content[$ref];
+        }
+        $b = null;
+        $rel = substr($ref, 11);
+        if (preg_match('/^[1-9]\d{0,17}$/D', $rel)) {
+            $b = $this->fetch($rel);
+        } elseif (strlen($rel) <= 200 && preg_match('#^[A-Za-z0-9_ .\-]+(/[A-Za-z0-9_ .\-]+){0,7}$#D', $rel) && strpos($rel, '..') === false
+            && in_array(strtolower(pathinfo($rel, PATHINFO_EXTENSION)), ['mesh', 'png', 'jpg', 'jpeg'], true)) {
+            $own = $this->bundledContent(strtolower($rel));
+            if ($own !== null) {
+                $b = (string)file_get_contents($own);
+            } else {
+                $b = $this->contentFetch($rel);
+            }
+        }
+        return $this->content[$ref] = $b;
+    }
+
+    private function contentFetch(string $rel): ?string {
+        $file = $this->cacheDir ? $this->cacheDir . '/content-' . hash('sha256', $this->assetBase . $rel) : null;
+        if ($file && is_file($file) && filemtime($file) > time() - 300) {
+            return (string)file_get_contents($file);
+        }
+        $url = $this->assetBase . implode('/', array_map('rawurlencode', explode('/', $rel)));
+        $b = $this->fetcher ? ($this->fetcher)($rel) : $this->httpGet($url);
+        if ($b !== null && strlen($b) > self::MAX_ASSET_BYTES) {
+            $b = null;
+        }
+        if ($b !== null && $file) {
+            @file_put_contents($file, $b, LOCK_EX);
+        }
+        return $b;
+    }
+
+    private function bundledContent(string $rel): ?string {
+        $map = ['fonts/head.mesh' => 'head.mesh', 'fonts/torso.mesh' => 'torso.mesh', 'fonts/leftarm.mesh' => 'leftarm.mesh', 'fonts/rightarm.mesh' => 'rightarm.mesh',
+            'fonts/leftleg.mesh' => 'leftleg.mesh', 'fonts/rightleg.mesh' => 'rightleg.mesh', 'textures/face.png' => 'face.png'];
+        return isset($map[$rel]) ? $this->dataDir . '/' . $map[$rel] : null;
     }
 
     private function decoded(string $id, string $bytes, bool $hat): ?Img {
@@ -224,6 +274,10 @@ trait Assets {
     }
 
     function image($ref, int $depth = 0, bool $big = false): ?Img {
+        if (self::isContent($ref)) {
+            $b = $this->contentBytes($ref);
+            return $b !== null && Img::isImageBytes($b) ? ($big ? Img::decodeHat($b) : Img::decode($b, self::MAX_IMAGE_SIDE)) : null;
+        }
         $id = self::assetId($ref);
         if (!$id) {
             return null;

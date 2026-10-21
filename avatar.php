@@ -162,7 +162,7 @@ function keepOnly(string $dir, string $sid, string $file, int $maxAge, int $maxB
     $sids = [];
     // only our own file names are ever touched and links are skipped
     foreach (@scandir($dir) ?: [] as $b) {
-        if (!preg_match('/^(render-[0-9a-f]{64}\.(png|webp|jpg)|sid-[0-9a-f]{16,32}|asset-\d{1,18}|img-\d{1,18}h?\.z|charapp-[0-9a-f]{64}|.+\.\d+\.tmp)$/D', $b)) {
+        if (!preg_match('/^(render-[0-9a-f]{64}\.(png|webp|jpg)|sid-[0-9a-f]{16,32}|asset-\d{1,18}|img-\d{1,18}h?\.z|charapp-[0-9a-f]{64}|content-[0-9a-f]{64}|.+\.\d+\.tmp)$/D', $b)) {
             continue;
         }
         $f = "$dir/$b";

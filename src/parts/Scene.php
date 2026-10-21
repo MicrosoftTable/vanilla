@@ -48,7 +48,7 @@ trait Scene {
             }
         }
         if ($only === 'items' && !$items) {
-            throw new \RuntimeException('the item could not be drawn');
+            throw new \InvalidArgumentException('the item could not be drawn' . ($look['notes'] ? ' (' . $look['notes'][0] . ')' : ''));
         }
         $faceImg = $look['face'] ?: $base['face'];
         $Wss = $W * $SS;
