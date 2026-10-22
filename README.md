@@ -85,12 +85,26 @@ avatar.php?item=1234&size=420x420
 | hat, accessory, gear | the item alone, framed to fit (if the hat has its own thumbnail camera, that angle is used) |
 | head, face | the head alone |
 | shirt, pants, t-shirt | a gray avatar wearing it |
-| package (old id list or the newer r6/r15 bundle) | a full avatar with the package's parts on the grey and blue checkered template and every other part white, r6 only |
+| package (old id list or the newer r6/r15 bundle) | a full avatar with the package's parts, r6 only. parts with their own textures are drawn with them, parts without one go on the grey and blue checkered template, and every other part is white (or the package's own body colors if it has a BodyColors entry) |
 | package with a single body part (one arm, leg or torso) | that part on its own, close up and straight on |
 
 anything else (bare images, models without one of the above) is refused.
 
 note on packages: when a package is a single body part, that part is rendered separately (on its own, close up and straight on), and its position is not accurate to how roblox did it. that's on purpose, vanilla takes a different approach here.
+
+### asset versions
+
+any asset id can be pinned to a version, either as `123@4` or as an asset url with `&version=4` (`live` and `latest` work too). vanilla asks your asset host for `assetBase + id + &version=4`. pinned versions are cached for a day, `live` and `latest` only for a minute.
+
+a package list can pin its parts the same way, like a charapp:
+
+```
+https://site.com/asset/?id=100301953&version=1;https://site.com/asset/?id=100301459&version=1;...
+```
+
+### package heads
+
+a package head is drawn with its own mesh and texture. transparent parts of the texture show the head color underneath. if the head has a `NeckRigAttachment` it sits on the neck by that point instead of the middle of the head. a face decal on the head (or the default face, unless the head is tagged `NoFace`) is drawn onto the front of the mesh.
 
 ### rbxasset:// paths
 

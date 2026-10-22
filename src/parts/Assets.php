@@ -3,9 +3,27 @@ namespace Vanilla;
 
 // fetching assets by id and decoding them (only ever from the configured host)
 trait Assets {
+    // an asset is a number, or a number and a version written 123@4 (a version is a number, live or latest)
     static function parseId($s): ?string {
         $s = trim((string)$s);
-        return preg_match('/^[1-9]\d{0,17}$/D', $s) ? $s : null;
+        return preg_match('/^[1-9]\d{0,17}(@([1-9]\d{0,5}|live|latest))?$/D', $s) ? $s : null;
+    }
+
+    // "123@4" -> ["123", "4"]; "123" -> ["123", null]
+    static function splitKey(string $key): array {
+        $p = explode('@', $key, 2);
+        return [$p[0], $p[1] ?? null];
+    }
+
+    // the address of an asset on the asset host, with its version when it has one
+    private function assetUrl(string $key): string {
+        [$n, $v] = self::splitKey($key);
+        return $this->assetBase . $n . ($v === null ? '' : '&version=' . $v);
+    }
+
+    // a version that can change ("live", "latest") is only kept a minute; everything else a day
+    private static function keepFor(string $key): int {
+        return preg_match('/@(live|latest)$/D', $key) ? 60 : 86400;
     }
 
     static function assetId($ref): ?string {
@@ -19,7 +37,21 @@ trait Assets {
                 $m
             )
         ) {
-            return preg_match('/^[1-9]/', $m[1]) ? $m[1] : null;
+            if (!preg_match('/^[1-9]/', $m[1])) {
+                return null;
+            }
+            // ...&version=N pins a version
+            if (preg_match('/[?&]version=([1-9]\d{0,5}|live|latest)(?![\w])/i', $ref, $v)) {
+                return $m[1] . '@' . strtolower($v[1]);
+            }
+            // 123@4 as written by a caller
+            if (preg_match('/^(\d{1,18})@([1-9]\d{0,5}|live|latest)$/iD', trim($ref), $w) && preg_match('/^[1-9]/', $w[1])) {
+                return $w[1] . '@' . strtolower($w[2]);
+            }
+            return $m[1];
+        }
+        if (preg_match('/^([1-9]\d{0,17})@([1-9]\d{0,5}|live|latest)$/iD', trim($ref), $w)) {
+            return $w[1] . '@' . strtolower($w[2]);
         }
         return null;
     }
@@ -34,7 +66,7 @@ trait Assets {
         }
         $b = null;
         $file = $this->cacheDir ? $this->cacheDir . '/asset-' . $id : null;
-        if ($file && is_file($file) && filemtime($file) > time() - 86400) {
+        if ($file && is_file($file) && filemtime($file) > time() - self::keepFor($id)) {
             $b = file_get_contents($file);
         }
         if ($b === null || $b === false) {
@@ -43,7 +75,7 @@ trait Assets {
                 if ($n) {
                     usleep(400000 * $n);
                 }
-                $b = $this->fetcher ? ($this->fetcher)($id) : $this->httpGet($this->assetBase . $id);
+                $b = $this->fetcher ? ($this->fetcher)($id) : $this->httpGet($this->assetUrl($id));
             }
             if ($b !== null && $file) {
                 @file_put_contents($file, $b, LOCK_EX);
@@ -148,7 +180,7 @@ trait Assets {
                 continue;
             }
             $file = $this->cacheDir ? $this->cacheDir . '/asset-' . $id : null;
-            if ($file && is_file($file) && filemtime($file) > time() - 86400) {
+            if ($file && is_file($file) && filemtime($file) > time() - self::keepFor($id)) {
                 continue;
             }
             $need[$id] = $file;
@@ -161,7 +193,7 @@ trait Assets {
         $hs = [];
         $bufs = [];
         foreach ($need as $id => $file) {
-            $t = Net::target($this->assetBase . $id, $opts);
+            $t = Net::target($this->assetUrl((string)$id), $opts);
             if ($t === null) {
                 continue;
             }
@@ -257,7 +289,7 @@ trait Assets {
 
     private function decoded(string $id, string $bytes, bool $hat): ?Img {
         $f = $this->cacheDir ? $this->cacheDir . '/img-' . $id . ($hat ? 'h' : '') . '.z' : null;
-        if ($f && is_file($f) && filemtime($f) > time() - 86400) {
+        if ($f && is_file($f) && filemtime($f) > time() - self::keepFor($id)) {
             $im = Img::fromCache((string)@file_get_contents($f));
             if ($im) {
                 return $im;

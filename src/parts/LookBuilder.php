@@ -337,7 +337,7 @@ trait LookBuilder {
 
     private static function emptyLook(): array {
         return ['colors' => ['head' => self::brick(24), 'torso' => self::brick(23), 'leftArm' => self::brick(24), 'rightArm' => self::brick(24), 'leftLeg' => self::brick(119), 'rightLeg' => self::brick(119)],
-            'headMesh' => null, 'bodyMeshes' => [], 'shirt' => null, 'pants' => null, 'tshirt' => null, 'face' => null, 'faceSet' => false, 'accessories' => [], 'tool' => null, 'only' => '', 'notes' => []];
+            'headMesh' => null, 'bodyMeshes' => [], 'shirt' => null, 'pants' => null, 'tshirt' => null, 'face' => null, 'faceSet' => false, 'headSize' => null, 'accessories' => [], 'tool' => null, 'only' => '', 'notes' => []];
     }
 
     private function absorbTree(array &$look, array $tree, string $tag): void {
@@ -361,6 +361,9 @@ trait LookBuilder {
                 // bundles carry an r6 and an r15 version and only r6 is drawn
                 if (preg_match('/^r15/i', (string)$x->name) && !in_array($x->cls, ['Hat', 'Accessory', 'Accoutrement', 'Tool'], true)) {
                     continue;
+                }
+                if (in_array($x->cls, ['Part', 'MeshPart'], true) && strtolower((string)$x->name) === 'head' && !$look['headSize']) {
+                    $look['headSize'] = self::v3($P['size'] ?? ($P['Size'] ?? null), [2, 1, 1]);
                 }
                 if ($x->cls === 'CharacterMesh') {
                     $names = [0 => 'head', 1 => 'torso', 2 => 'leftArm', 3 => 'rightArm', 4 => 'leftLeg', 5 => 'rightLeg',
@@ -418,6 +421,11 @@ trait LookBuilder {
         }
         if (Img::isImageBytes($b)) {
             $look['notes'][] = "$id: this is a bare image, not a shirt, pants, face, hat or gear asset, so it was refused";
+            return;
+        }
+        // a package can carry body colours (a BodyColors asset in its list, like a charapp's bodycolors entry)
+        if (strpos($b, 'BodyColors') !== false && ($bc = CharApp::bodyColors($b)) !== null) {
+            $look['pkgColors'] = $bc;
             return;
         }
         try {
