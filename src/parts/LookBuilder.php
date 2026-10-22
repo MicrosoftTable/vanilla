@@ -275,7 +275,7 @@ trait LookBuilder {
                 } else {
                     $b = $this->bytes($meshUrl);
                     if ($b === null) { throw new \RuntimeException('a mesh could not be fetched'); }
-                    $m = self::cleanMesh(self::parseMesh($b));
+                    $m = self::cleanMesh(self::parseMesh2016($b));   // newer (v2, v3) meshes carry their V the other way up
                 }
             } elseif ((is_numeric($type) && (int)$type === 0)
                 || (is_string($type) && strcasecmp($type, 'Head') === 0)) {
