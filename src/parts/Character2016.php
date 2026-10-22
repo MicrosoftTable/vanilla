@@ -124,7 +124,7 @@ trait Character2016 {
             $ids[] = $k . '=' . self::meshContent2016($m->props['BaseTextureId'] ?? null) . '/' . self::meshContent2016($m->props['OverlayTextureId'] ?? null);
         }
         $hp = $look['headMesh'] ? $look['headMesh']->props : [];
-        $key = md5(json_encode([$look['colors'], $ids, self::meshContent2016($hp['TextureId'] ?? null), self::meshContent2016($hp['MeshId'] ?? null),
+        $key = md5(json_encode([!empty($look['pkgview']), $look['colors'], $ids, self::meshContent2016($hp['TextureId'] ?? null), self::meshContent2016($hp['MeshId'] ?? null),
             $hp['Scale'] ?? null, $hp['Offset'] ?? null, $hp['Tags'] ?? null, $look['headSize'] ?? null,
             $sig($look['shirt']), $sig($look['pants']), $sig($look['tshirt']), $sig($face)]));
         if (isset($this->tex2016Cache[$key])) {
@@ -145,14 +145,17 @@ trait Character2016 {
             $props = isset($look['bodyMeshes'][$key]) ? $look['bodyMeshes'][$key]->props : [];
             $baseId = self::meshContent2016($props['BaseTextureId'] ?? null);
             $overlayId = self::meshContent2016($props['OverlayTextureId'] ?? null);
-            $cacheKey = ($baseId ?? '') . '|' . ($overlayId ?? '');
+            // a package drawn on its own: its parts carry the checkered shirt and pants template (between base and overlay)
+            $tplLayer = !empty($look['pkgview']) && isset($look['bodyMeshes'][$key]) ? $this->packageTemplateImage() : null;
+            $cacheKey = ($baseId ?? '') . '|' . ($overlayId ?? '') . ($tplLayer ? '|t' : '');
             if (!isset($atlases[$cacheKey])) {
                 $atlas = clone $background;
                 if ($baseId && ($image = $this->image($baseId))) {
                     $this->compositeLayer2016($atlas, 'CompositFullAtlasBaseTexture', $image, [1, 1, 1]);
                 }
                 foreach (['pants' => 'CompositPantsTemplate', 'shirt' => 'CompositShirtTemplate', 'tshirt' => 'CompositTShirt'] as $layer => $mesh) {
-                    if ($look[$layer]) { $this->compositeLayer2016($atlas, $mesh, $look[$layer], [1, 1, 1]); }
+                    $image = $look[$layer] ?: ($tplLayer && $layer !== 'tshirt' ? $tplLayer : null);
+                    if ($image) { $this->compositeLayer2016($atlas, $mesh, $image, [1, 1, 1]); }
                 }
                 if ($overlayId && ($image = $this->image($overlayId))) {
                     $this->compositeLayer2016($atlas, 'CompositFullAtlasOverlayTexture', $image, [1, 1, 1]);

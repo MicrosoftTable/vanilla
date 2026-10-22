@@ -115,7 +115,7 @@ trait ItemRender {
             if ($pkg && empty($look['pkgColors'])) {
                 $look['colors'][$name] = self::brick(24);   // the package's own part sits on skin yellow (what its texture was made for), not on the default torso blue
             }
-            $img = $this->partImage($cm->props, $look['colors'][$name]);
+            $img = $this->partImage($cm->props, $look['colors'][$name], $pkg);
             if ($img) {
                 $tex[$part] = new Texture($img);
                 $tex[$part]->repeat = false;
@@ -353,13 +353,45 @@ trait ItemRender {
     }
 
     // a part texture: the body colour with the base texture and then the overlay on top
-    private function partImage(array $props, array $color): ?Img {
+    private $pkgAtlas = false;
+
+    // the shirt and pants template of package pictures (grey and blue checks), keyed to see-through where it is plain grey
+    private function packageTemplateImage(): ?Img {
+        $f = __DIR__ . '/../../data/package-template.png';
+        $tpl = is_file($f) ? Img::decode((string)file_get_contents($f)) : null;
+        if (!$tpl) {
+            return null;
+        }
+        foreach ($tpl->px as $i => $v) {
+            if (($v & 0xFFFFFF) === 0x808080) {
+                $tpl->px[$i] = 0;
+            }
+        }
+        return $tpl;
+    }
+
+    // that template laid out like the body-part textures (a 1024x512 atlas, the same as the 2016 renderer builds)
+    private function packageTemplateAtlas(): ?Img {
+        if ($this->pkgAtlas === false) {
+            $tpl = $this->packageTemplateImage();
+            $this->pkgAtlas = null;
+            if ($tpl) {
+                $atlas = new Img(1024, 512);
+                $this->compositeLayer2016($atlas, 'CompositPantsTemplate', $tpl, [1, 1, 1]);
+                $this->compositeLayer2016($atlas, 'CompositShirtTemplate', $tpl, [1, 1, 1]);
+                $this->pkgAtlas = $atlas;
+            }
+        }
+        return $this->pkgAtlas;
+    }
+
+    private function partImage(array $props, array $color, bool $template = false): ?Img {
         $bid = self::meshContent2016($props['BaseTextureId'] ?? null);
         $oid = self::meshContent2016($props['OverlayTextureId'] ?? null);
         if (!$bid && !$oid) {
             return null;
         }
-        $key = $bid . '|' . $oid . '|' . implode(',', $color);
+        $key = $bid . '|' . $oid . '|' . implode(',', $color) . ($template ? '|t' : '');
         if (array_key_exists($key, $this->partImgCache)) {
             return $this->partImgCache[$key];
         }
@@ -387,6 +419,24 @@ trait ItemRender {
         $img->fillRect(0, 0, $img->w, $img->h, [(int)round($color[0] * 255), (int)round($color[1] * 255), (int)round($color[2] * 255)]);
         if ($base) {
             $img->drawOver($base);
+        }
+        if ($template) {
+            // a package drawn on its own: the checkered shirt and pants template lies where clothes would go, over the part's
+            // base texture and under its overlay (as Roblox's catalog picture does)
+            $atlas = $this->packageTemplateAtlas();
+            if ($atlas) {
+                $w = $img->w;
+                $h = $img->h;
+                for ($y = 0; $y < $h; $y++) {
+                    $row = (int)(($y + 0.5) / $h * 512) * 1024;
+                    for ($x = 0; $x < $w; $x++) {
+                        $t = $atlas->px[$row + (int)(($x + 0.5) / $w * 768)];
+                        if ($t >> 24) {
+                            $img->px[$y * $w + $x] = $t;
+                        }
+                    }
+                }
+            }
         }
         if ($over) {
             if ($over->w === $img->w && $over->h === $img->h) {
