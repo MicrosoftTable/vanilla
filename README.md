@@ -90,6 +90,8 @@ avatar.php?item=1234&size=420x420
 
 anything else (bare images, models without one of the above) is refused.
 
+note on packages: when a package is a single body part, that part is rendered separately (on its own, close up and straight on), and its position is not accurate to how roblox did it. that's on purpose, vanilla takes a different approach here.
+
 ### rbxasset:// paths
 
 some gear points at `rbxasset://` files. vanilla swaps the `rbxasset://` part for your asset url, so with `assetBase` set to `https://site.com/asset/?id=` the path `rbxasset://fonts/sword.mesh` is requested as `https://site.com/asset/?id=fonts/sword.mesh`, and `rbxasset://123` is the same as asset id 123. only `.mesh`, `.png` and `.jpg` paths are read. the body part meshes and the default face are bundled.
