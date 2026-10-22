@@ -82,10 +82,11 @@ avatar.php?item=1234&size=420x420
 
 | item | what you get |
 |---|---|
-| hat, accessory, gear | the item alone, framed to fit |
+| hat, accessory, gear | the item alone, framed to fit (if the hat has its own thumbnail camera, that angle is used) |
 | head, face | the head alone |
 | shirt, pants, t-shirt | a gray avatar wearing it |
-| package (old id list or the newer r6/r15 bundle) | a full avatar in the package, r6 only |
+| package (old id list or the newer r6/r15 bundle) | a full avatar with the package's parts on the grey and blue checkered template and every other part white, r6 only |
+| package with a single body part (one arm, leg or torso) | that part on its own, close up and straight on |
 
 anything else (bare images, models without one of the above) is refused.
 

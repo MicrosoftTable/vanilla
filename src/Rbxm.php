@@ -422,6 +422,16 @@ final class Rbxm {
                     $out[] = ['__ref' => $a];
                 }
                 return $out;
+            case 27:
+                // Int64 (a CharacterMesh's MeshId, BaseTextureId and OverlayTextureId): 8 bytes interleaved, zigzag
+                for ($i = 0; $i < $n; $i++) {
+                    $u = 0;
+                    for ($b = 0; $b < 8; $b++) {
+                        $u = ($u << 8) | ord($data[$q + $b * $n + $i]);
+                    }
+                    $out[] = (($u >> 1) & 0x7fffffffffffffff) ^ -($u & 1);
+                }
+                return $out;
             case 26:
                 for ($i = 0; $i < $n; $i++) {
                     $out[] = [

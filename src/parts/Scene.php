@@ -3,6 +3,27 @@ namespace Vanilla;
 
 // camera lighting and the draw calls for one look
 trait Scene {
+    /** The Camera named inside a hat model, expressed relative to the Handle, or null. */
+    private static function thumbCamOf(Inst $acc, Inst $h): ?array {
+        if (!isset($h->props['CFrame'])) {
+            return null;
+        }
+        foreach ($acc->children as $c) {
+            if ($c->cls !== 'Camera' || !isset($c->props['CFrame'])) {
+                continue;
+            }
+            $inv = self::cfInv(self::cfFrom($h->props['CFrame']));
+            $cam = self::cfMul($inv, self::cfFrom($c->props['CFrame']));
+            $fp  = self::cfApply($inv, self::cfFrom($c->props['Focus'] ?? $c->props['CFrame'])['p']);
+            if (self::dot(self::sub($cam['p'], $fp), self::sub($cam['p'], $fp)) < 1e-6) {
+                return null;
+            }
+            $fov = (float)($c->props['FieldOfView'] ?? 70);
+            return ['eye' => $cam['p'], 'up' => [$cam['R'][1], $cam['R'][4], $cam['R'][7]], 'focus' => $fp, 'fov' => min(90, max(15, $fov ?: 70))];
+        }
+        return null;
+    }
+
     private function draw(array &$look, int $W, int $H, int $SS, string $view = 'body'): string {
         $base = $this->base();
         $only = $look['only'];
@@ -23,6 +44,7 @@ trait Scene {
             if ($h) {
                 $it = $this->buildHandleDrawable($h, $this->accessoryFrame($acc, $h, $cfs), $look['notes']);
                 if ($it) {
+                    try { $it['thumbCam'] = self::thumbCamOf($acc, $h); } catch (\Throwable $e) { $it['thumbCam'] = null; }
                     $items[] = $it;
                 }
             }
@@ -64,7 +86,33 @@ trait Scene {
                 ($vp[1] * $p[0] + $vp[5] * $p[1] + $vp[9] * $p[2] + $vp[13]) / $w
             ];
         };
-        if ($this->renderer === '2016' && $view === 'body') {
+        $partMap = ['torso' => ['Torso', 0], 'rightArm' => ['Right Arm', 1], 'leftArm' => ['Left Arm', 2], 'rightLeg' => ['Right Leg', 3], 'leftLeg' => ['Left Leg', 4]];
+        $onlyPart = (strncmp($only, 'part:', 5) === 0 && isset($partMap[substr($only, 5)])) ? substr($only, 5) : null;
+        if ($onlyPart !== null) {
+            // one body part on its own: zoomed in and looked at straight from the front
+            [$cfName, $partIdx] = $partMap[$onlyPart];
+            $pts = array_map(function ($q) use ($cfs, $cfName) { return self::cfApply($cfs[$cfName], $q); }, $base[$onlyPart]['pos']);
+            $lo = [1e9, 1e9, 1e9]; $hi = [-1e9, -1e9, -1e9];
+            foreach ($pts as $q) { for ($k = 0; $k < 3; $k++) { $lo[$k] = min($lo[$k], $q[$k]); $hi[$k] = max($hi[$k], $q[$k]); } }
+            $center = [($lo[0] + $hi[0]) / 2, ($lo[1] + $hi[1]) / 2, ($lo[2] + $hi[2]) / 2];
+            $radius = sqrt(($hi[0] - $lo[0]) ** 2 + ($hi[1] - $lo[1]) ** 2 + ($hi[2] - $lo[2]) ** 2) / 2;
+            $fov = 18 * M_PI / 180;
+            $dist = 1.3 * max($radius, 0.5) / tan($fov / 2);
+            $eye = [$center[0], $center[1], $center[2] - $dist];
+            $vp = self::mul4(self::perspective($fov, $W / $H, 0.1, 400), self::lookAt($eye, $center, [0, 1, 0]));
+            $nx0 = 1e9; $nx1 = -1e9; $ny0 = 1e9; $ny1 = -1e9;
+            foreach ($pts as $q) {
+                $w = $vp[3] * $q[0] + $vp[7] * $q[1] + $vp[11] * $q[2] + $vp[15];
+                if ($w <= 1e-6) { continue; }
+                $x = ($vp[0] * $q[0] + $vp[4] * $q[1] + $vp[8] * $q[2] + $vp[12]) / $w;
+                $y = ($vp[1] * $q[0] + $vp[5] * $q[1] + $vp[9] * $q[2] + $vp[13]) / $w;
+                $nx0 = min($nx0, $x); $nx1 = max($nx1, $x); $ny0 = min($ny0, $y); $ny1 = max($ny1, $y);
+            }
+            if ($nx1 > $nx0 && $ny1 > $ny0) {
+                $s = 0.86 / max(($nx1 - $nx0) / 2, ($ny1 - $ny0) / 2);
+                $vp = self::mul4([$s, 0, 0, 0, 0, $s, 0, 0, 0, 0, 1, 0, -$s * ($nx0 + $nx1) / 2, -$s * ($ny0 + $ny1) / 2, 0, 1], $vp);
+            }
+        } elseif ($this->renderer === '2016' && $view === 'body') {
             $camera = self::thumbnailCamera2016(self::sceneBounds2016($base, $cfs, $items, false, $only), $W, $H, (bool)$only, self::sceneBounds2016($base, $cfs, $items, true, $only));
             $vp = $camera['vp']; $eye = $camera['eye']; $center = $camera['center'];
         } elseif ($view === 'head') {
@@ -122,7 +170,23 @@ trait Scene {
             $dist = self::CAM_ZOOM * $radius / tan($fov / 2);
             $cd = self::norm(self::CAM_DIR);
             $eye = [$center[0] + $cd[0] * $dist, $center[1] + $cd[1] * $dist, $center[2] + $cd[2] * $dist];
-            $vp = self::mul4(self::perspective($fov, $W / $H, 0.1, 200), self::lookAt($eye, $center, [0, 1, 0]));
+            $camUp = [0, 1, 0];
+            if ($only === 'items' && count($items) === 1 && !empty($items[0]['thumbCam'])) { try {
+                // the hat's own ThumbnailCamera (what Roblox used for its catalog picture): same angle, same focus point
+                $tc = $items[0]['thumbCam'];
+                $fp = self::cfApply($items[0]['cf'], $tc['focus']);
+                $ep = self::cfApply($items[0]['cf'], $tc['eye']);
+                $dir = self::norm(self::sub($ep, $fp));
+                $up = self::rmul($items[0]['cf']['R'], $tc['up']);
+                if (abs(self::dot($dir, self::norm($up))) < 0.98) {
+                    $fov = $tc['fov'] * M_PI / 180;
+                    $center = $fp;
+                    $dist = max(1.0 * $radius, 0.5) / tan($fov / 2);
+                    $eye = [$center[0] + $dir[0] * $dist, $center[1] + $dir[1] * $dist, $center[2] + $dir[2] * $dist];
+                    $camUp = self::norm($up);
+                }
+            } catch (\Throwable $e) { $camUp = [0, 1, 0]; } }
+            $vp = self::mul4(self::perspective($fov, $W / $H, 0.1, 200), self::lookAt($eye, $center, $camUp));
 
             $nx0 = 1e9;
             $nx1 = -1e9;
@@ -222,6 +286,8 @@ trait Scene {
             $calls = [];
         } elseif ($only === 'head') {
             $calls = [$calls[5]];
+        } elseif ($onlyPart !== null) {
+            $calls = [$calls[$partIdx]];
         }
         foreach ($items as $it) {
             if ($it['tex']) {
