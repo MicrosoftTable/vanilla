@@ -115,7 +115,26 @@ trait Character2016 {
         }
     }
 
+    private $tex2016Cache = [];   // the last textures put together, reused when the next picture (the headshot) shows the same
+
     private function characterTextures2016(array $look, Img $face, ?array $headMesh = null): array {
+        $sig = function ($im) { return $im ? md5($im->w . 'x' . $im->h . ':' . implode(',', $im->px)) : '-'; };
+        $ids = [];
+        foreach ($look['bodyMeshes'] as $k => $m) {
+            $ids[] = $k . '=' . self::meshContent2016($m->props['BaseTextureId'] ?? null) . '/' . self::meshContent2016($m->props['OverlayTextureId'] ?? null);
+        }
+        $hp = $look['headMesh'] ? $look['headMesh']->props : [];
+        $key = md5(json_encode([$look['colors'], $ids, self::meshContent2016($hp['TextureId'] ?? null), self::meshContent2016($hp['MeshId'] ?? null),
+            $hp['Scale'] ?? null, $hp['Offset'] ?? null, $hp['Tags'] ?? null, $look['headSize'] ?? null,
+            $sig($look['shirt']), $sig($look['pants']), $sig($look['tshirt']), $sig($face)]));
+        if (isset($this->tex2016Cache[$key])) {
+            return $this->tex2016Cache[$key];
+        }
+        $this->tex2016Cache = [$key => $this->buildTextures2016($look, $face, $headMesh)];
+        return $this->tex2016Cache[$key];
+    }
+
+    private function buildTextures2016(array $look, Img $face, ?array $headMesh): array {
         $background = new Img(1024, 512, array_fill(0, 1024 * 512, 0x00808080));
         $parts = ['torso' => 'Torso', 'leftArm' => 'LeftArm', 'rightArm' => 'RightArm', 'leftLeg' => 'LeftLeg', 'rightLeg' => 'RightLeg'];
         foreach ($parts as $key => $name) {

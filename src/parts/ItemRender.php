@@ -3,6 +3,8 @@ namespace Vanilla;
 
 // rendering one item on its own: hats and gear alone, heads and faces alone, clothing on a gray avatar, packages on a full avatar
 trait ItemRender {
+    private $partImgCache = [];   // body part textures already put together in this run (parts often share one)
+
     private static function packageIds(string $body): array {
         $t = trim($body);
         if ($t === '' || strlen($t) > 4096 || $t[0] === '<' || !preg_match('/^[\x20-\x7e\s]+$/D', $t)) {
@@ -352,14 +354,32 @@ trait ItemRender {
 
     // a part texture: the body colour with the base texture and then the overlay on top
     private function partImage(array $props, array $color): ?Img {
-        $get = function ($k) use ($props) {
-            $v = self::meshContent2016($props[$k] ?? null);
-            return $v ? $this->image($v) : null;
-        };
-        $base = $get('BaseTextureId');
-        $over = $get('OverlayTextureId');
-        if (!$base && !$over) {
+        $bid = self::meshContent2016($props['BaseTextureId'] ?? null);
+        $oid = self::meshContent2016($props['OverlayTextureId'] ?? null);
+        if (!$bid && !$oid) {
             return null;
+        }
+        $key = $bid . '|' . $oid . '|' . implode(',', $color);
+        if (array_key_exists($key, $this->partImgCache)) {
+            return $this->partImgCache[$key];
+        }
+        // a body part fills a small piece of the picture, so its texture is read at 512 pixels at most: a 1024 texture would
+        // be four times the work for no visible difference
+        $get = function ($v) {
+            if (!$v) {
+                return null;
+            }
+            $id = self::assetId($v);
+            $b = $id ? $this->fetch($id) : null;
+            if ($b !== null && Img::isImageBytes($b)) {
+                return Img::decode($b, 512, self::MAX_IMAGE_SIDE);
+            }
+            return $this->image($v);
+        };
+        $base = $get($bid);
+        $over = $get($oid);
+        if (!$base && !$over) {
+            return $this->partImgCache[$key] = null;
         }
         // a part may carry only an overlay (or only a base): whichever it has is drawn on the body colour
         $first = $base ?: $over;
@@ -369,8 +389,12 @@ trait ItemRender {
             $img->drawOver($base);
         }
         if ($over) {
-            $img->drawScaled($over, 0, 0, $img->w, $img->h);
+            if ($over->w === $img->w && $over->h === $img->h) {
+                $img->drawOver($over);
+            } else {
+                $img->drawScaled($over, 0, 0, $img->w, $img->h);
+            }
         }
-        return $img;
+        return $this->partImgCache[$key] = $img;
     }
 }
