@@ -249,7 +249,7 @@ trait Scene {
         }
 
         if ($this->renderer === '2016') {
-            [$bodyTextures2016, $headTexture2016] = $this->characterTextures2016($look, $faceImg);
+            [$bodyTextures2016, $headTexture2016] = $this->characterTextures2016($look, $faceImg, $base['head']);
             $upTex = $loTex = $bodyTextures2016['torso'];
         } else {
             [$upTex, $loTex] = self::paintSheets($look, $base['inlet']);

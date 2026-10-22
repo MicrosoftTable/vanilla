@@ -115,7 +115,7 @@ trait Character2016 {
         }
     }
 
-    private function characterTextures2016(array $look, Img $face): array {
+    private function characterTextures2016(array $look, Img $face, ?array $headMesh = null): array {
         $background = new Img(1024, 512, array_fill(0, 1024 * 512, 0x00808080));
         $parts = ['torso' => 'Torso', 'leftArm' => 'LeftArm', 'rightArm' => 'RightArm', 'leftLeg' => 'LeftLeg', 'rightLeg' => 'RightLeg'];
         foreach ($parts as $key => $name) {
@@ -153,7 +153,14 @@ trait Character2016 {
         if ($look['headMesh']) {
             $textureId = self::meshContent2016($look['headMesh']->props['TextureId'] ?? null);
             if ($textureId && ($image = $this->image($textureId))) {
-                $headTexture = new Texture($image);
+                // the head's own texture sits on the head colour, and its face goes on the front of the shape (as in 2012)
+                $flat = new Img($image->w, $image->h);
+                $flat->fillRect(0, 0, $flat->w, $flat->h, $rgb);
+                $flat->drawOver($image);
+                if ($headMesh && !preg_match('/\bNoFace\b/', (string)($look['headMesh']->props['Tags'] ?? ''))) {
+                    self::bakeFace($flat, $headMesh, $face, $look['headSize'] ?: [2, 1, 1]);
+                }
+                $headTexture = new Texture($flat);
                 $headTexture->repeat = false;
             }
         }
