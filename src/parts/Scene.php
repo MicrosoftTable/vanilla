@@ -25,6 +25,9 @@ trait Scene {
     }
 
     private function draw(array &$look, int $W, int $H, int $SS, string $view = 'body'): string {
+        if ($view === 'head') {
+            $look['tool'] = null;   // a headshot never shows gear: it is held in the hand, not worn on the head
+        }
         $base = $this->base();
         $only = $look['only'];
         $partTex = [];
@@ -121,6 +124,21 @@ trait Scene {
             $fov = self::HEAD_FOV * M_PI / 180;
             $dist = self::HEAD_DIST;
             $cd = self::norm(self::HEAD_DIR);
+            // A hat that reaches well out in front of the face (an astronaut helmet, a big cap brim) ends up very close to the lens,
+            // and perspective then blows it up and bends it. Back the camera off until the nearest hat point is a sane distance away
+            // and narrow the lens by the same ratio, so the head keeps its size but the hat is not warped.
+            $near = INF;
+            foreach (array_slice($items, 0, $nHats) as $it) {
+                foreach ($it['geom']['pos'] as $p) {
+                    $q = self::cfApply($it['cf'], $p);
+                    $near = min($near, $dist - (($q[0] - $center[0]) * $cd[0] + ($q[1] - $center[1]) * $cd[1] + ($q[2] - $center[2]) * $cd[2]));
+                }
+            }
+            if ($near < self::HEAD_NEAR) {
+                $newDist = $dist + (self::HEAD_NEAR - $near);
+                $fov = 2 * atan(tan($fov / 2) * $dist / $newDist);
+                $dist = $newDist;
+            }
             $eye = [$center[0] + $cd[0] * $dist, $center[1] + $cd[1] * $dist, $center[2] + $cd[2] * $dist];
             $vp = self::mul4(self::perspective($fov, $W / $H, 0.05, 200), self::lookAt($eye, $center, [0, 1, 0]));
             $m = 0;
@@ -166,7 +184,8 @@ trait Scene {
             }
             $center = [($lo[0] + $hi[0]) / 2, ($lo[1] + $hi[1]) / 2, ($lo[2] + $hi[2]) / 2];
             $radius = sqrt(($hi[0] - $lo[0]) ** 2 + ($hi[1] - $lo[1]) ** 2 + ($hi[2] - $lo[2]) ** 2) / 2;
-            $fov = self::CAM_FOV * M_PI / 180;
+            // a hat or gear on its own is drawn through a narrow lens: the wide thumbnail lens stretches tall, close things (helmets)
+            $fov = ($only === 'items' ? min(self::CAM_FOV, self::ITEM_THUMB_FOV) : self::CAM_FOV) * M_PI / 180;
             $dist = self::CAM_ZOOM * $radius / tan($fov / 2);
             $cd = self::norm(self::CAM_DIR);
             $eye = [$center[0] + $cd[0] * $dist, $center[1] + $cd[1] * $dist, $center[2] + $cd[2] * $dist];
@@ -178,9 +197,29 @@ trait Scene {
                 $ep = self::cfApply($items[0]['cf'], $tc['eye']);
                 $dir = self::norm(self::sub($ep, $fp));
                 $up = self::rmul($items[0]['cf']['R'], $tc['up']);
+                // a camera looking steeply down (or up) at the item shows a squashed, top-heavy shape: keep it within 35 degrees of level
+                $maxY = sin(35 * M_PI / 180);
+                if (abs($dir[1]) > $maxY) {
+                    $flat = sqrt(max(1e-9, $dir[0] * $dir[0] + $dir[2] * $dir[2]));
+                    $k = sqrt(1 - $maxY * $maxY) / $flat;
+                    $dir = [$dir[0] * $k, $dir[1] < 0 ? -$maxY : $maxY, $dir[2] * $k];
+                    $up = [0, 1, 0];
+                }
                 if (abs(self::dot($dir, self::norm($up))) < 0.98) {
-                    $fov = $tc['fov'] * M_PI / 180;
+                    // the catalog cameras use wide lenses (often 70 degrees) set close in, which stretches whatever is nearest the
+                    // camera. Keep their angle but use a narrow lens from farther back; the fit below sizes the picture the same.
+                    $fov = min($tc['fov'], self::ITEM_THUMB_FOV) * M_PI / 180;
                     $center = $fp;
+                    // some hats ship a ThumbnailCamera whose Focus was left somewhere else entirely (the picture then shows nothing
+                    // or only a corner). Keep the camera's angle and lens but aim it at the item.
+                    $ic = [0, 0, 0];
+                    $n = 0;
+                    foreach ($items[0]['geom']['pos'] as $gp) { $q = self::cfApply($items[0]['cf'], $gp); for ($k = 0; $k < 3; $k++) { $ic[$k] += $q[$k]; } $n++; }
+                    $ib = $n ? [$ic[0] / $n, $ic[1] / $n, $ic[2] / $n] : $items[0]['cf']['p'];
+                    $off = self::sub($fp, $ib);
+                    if (self::dot($off, $off) > (1.5 * max($radius, 0.5)) ** 2) {
+                        $center = $ib;
+                    }
                     $dist = max(1.0 * $radius, 0.5) / tan($fov / 2);
                     $eye = [$center[0] + $dir[0] * $dist, $center[1] + $dir[1] * $dist, $center[2] + $dir[2] * $dist];
                     $camUp = self::norm($up);

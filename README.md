@@ -14,11 +14,15 @@
 
 ---
 
-renders 2012 style roblox avatars in php. you give it a charapp (or asset ids and body colors) and it gives you back a png. runs on regular shared hosting, no gpu or webgl or anything.
+renders 2012 style roblox avatars in php (a recreation, see below, not a port of rccservice). you give it a charapp (or asset ids and body colors) and it gives you back a png. runs on regular shared hosting, no gpu or webgl or anything.
 
 ## how it works
 
 you send a charapp link, it downloads the items from your asset host, builds the character and draws it in php, then sends back a png. renders get cached so the same avatar is instant after the first time (the first one takes about 0.5 to 2 seconds).
+
+## a recreation, not a port
+
+vanilla is a **recreation** of what rccservice does, not a port of it. none of roblox's engine or render code is in here, it's a separate renderer written from scratch in php and fitted by eye and by comparing against real thumbnails. that means renders are bound to be a little different from the real thing (lighting, camera, mesh edge cases, particles) and it's not meant to be 100% accurate.
 
 ## vs rccservice
 

@@ -59,7 +59,7 @@ final class Avatar {
         '48x48' => [48, 48]
     ];
     // headshot camera fitted to a real 2012 150x150 headshot
-    const HEAD_DIR = [0.0, 0.0, -1.0], HEAD_FOV = 42.84, HEAD_DIST = 3.405, HEAD_AIM = 0.0, HEAD_MAXOUT = 1.6;
+    const HEAD_DIR = [0.0, 0.0, -1.0], HEAD_FOV = 42.84, HEAD_DIST = 3.405, HEAD_AIM = 0.0, HEAD_MAXOUT = 1.6, HEAD_NEAR = 2.6, ITEM_THUMB_FOV = 20.0;
     const VIEWS = ['body', 'head'];
     const MAX_ASSET_BYTES = 8 * 1024 * 1024, MAX_IMAGE_SIDE = 2048, MAX_MESH_VERTS = 150000, MAX_IDS = 12, MAX_ACCESSORIES = 8;
     const DEFAULT_COLORS = ['#f5cd30', '#0d69ac', '#f5cd30', '#f5cd30', '#a4bd47', '#a4bd47'];
