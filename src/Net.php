@@ -139,7 +139,7 @@ final class Net {
             CURLOPT_CONNECTTIMEOUT => 8,
             CURLOPT_TIMEOUT => (int)($opts['timeout'] ?? 20),
             CURLOPT_ENCODING => '',
-            CURLOPT_USERAGENT => 'Vanilla/1.0',
+            CURLOPT_USERAGENT => (string)($opts['userAgent'] ?? 'Vanilla/1.0'),
             CURLOPT_HTTPHEADER => ['Accept: */*'],
             CURLOPT_NOPROXY => '*',
             CURLOPT_WRITEFUNCTION => function ($ch, $d) use (&$buf, $max) {

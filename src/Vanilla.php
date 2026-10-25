@@ -75,6 +75,7 @@ final class Avatar {
     private $content = [];
     private static $base = null;
     private $exact = false;
+    private $userAgent = 'Vanilla/1.0';   // sent on every outgoing request (set 'userAgent' in config.php)
     // optional camera override for one render (see README, "camera"): zoom 1 = the default framing, yaw and pitch in degrees from the default angle
     private $camZoom = 1.0, $camYaw = 0.0, $camPitch = 0.0;
 
@@ -82,6 +83,7 @@ final class Avatar {
         $this->assetBase = $opts['assetBase'] ?? 'https://example.com/asset/?id=';
         $this->allowedHosts = (array)($opts['allowedHosts'] ?? []);
         $this->allowPrivate = !empty($opts['allowPrivateHosts']);
+        $this->userAgent = (string)($opts['userAgent'] ?? 'Vanilla/1.0');
         $this->dataDir = $opts['dataDir'] ?? dirname(__DIR__) . '/data';
         $this->cacheDir = $opts['cacheDir'] ?? null;
         $this->fetcher = $opts['fetcher'] ?? null;
@@ -152,7 +154,7 @@ final class Avatar {
             }
             $c = CharApp::resolve(
                 (string)$req['charapp'],
-                ['assetBase' => $this->assetBase, 'allowedHosts' => $this->allowedHosts, 'allowPrivateHosts' => $this->allowPrivate, 'cacheDir' => $this->cacheDir]
+                ['assetBase' => $this->assetBase, 'allowedHosts' => $this->allowedHosts, 'allowPrivateHosts' => $this->allowPrivate, 'cacheDir' => $this->cacheDir, 'userAgent' => $this->userAgent]
             );
             $req['ids'] = $c['ids'];
             $req['colors'] = $req['colors'] ?? $c['colors'];

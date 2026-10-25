@@ -4,6 +4,8 @@ $config = [
     'renderer' => '2012', // '2012' or experimental '2016'; request can override
     'assetBase' => 'https://example.com/asset/?id=',
     'allowedHosts' => [],
+    // sent as the user agent on every request vanilla makes (asset fetches, charapps)
+    'userAgent' => 'Vanilla/1.0',
     // only for testing against a server on your own machine or network
     'allowPrivateHosts' => false,
     'cacheDir' => __DIR__ . '/cache',

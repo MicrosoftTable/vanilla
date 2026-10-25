@@ -92,6 +92,7 @@ trait Assets {
         $port = parse_url($this->assetBase, PHP_URL_PORT);
         return [
             'maxBytes' => self::MAX_ASSET_BYTES,
+            'userAgent' => $this->userAgent,
             'redirects' => 4,
             'allowPrivate' => $this->allowPrivate,
             'ports' => $port ? [(int)$port] : [],

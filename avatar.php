@@ -77,7 +77,7 @@ if (isset($q['charapp']) && $q['charapp'] !== '') {
     try {
         $ca = Vanilla\CharApp::resolve(
             $q['charapp'],
-            ['assetBase' => $config['assetBase'], 'allowedHosts' => $config['allowedHosts'] ?? [], 'allowPrivateHosts' => !empty($config['allowPrivateHosts']), 'cacheDir' => $cd]
+            ['assetBase' => $config['assetBase'], 'allowedHosts' => $config['allowedHosts'] ?? [], 'allowPrivateHosts' => !empty($config['allowPrivateHosts']), 'cacheDir' => $cd, 'userAgent' => $config['userAgent'] ?? 'Vanilla/1.0']
         );
     } catch (InvalidArgumentException $e) {
         fail(400, $e->getMessage());
@@ -280,6 +280,7 @@ try {
         'allowedHosts' => $config['allowedHosts'] ?? [],
         'allowPrivateHosts' => !empty($config['allowPrivateHosts']),
         'cacheDir' => $cacheDir,
+        'userAgent' => $config['userAgent'] ?? 'Vanilla/1.0',
     ]);
     $r = $avatar->render($item !== null
         ? ['item' => $item, 'size' => $size, 'smooth' => $smooth, 'renderer' => $renderer] + $cam

@@ -145,6 +145,7 @@ final class CharApp {
         $port = parse_url((string)($opts['assetBase'] ?? ''), PHP_URL_PORT);
         $buf = Net::get($url, [
             'maxBytes' => self::MAX_FETCH_BYTES,
+            'userAgent' => $opts['userAgent'] ?? 'Vanilla/1.0',
             'hosts' => self::hosts($opts),
             'redirects' => 3,
             'allowPrivate' => !empty($opts['allowPrivateHosts']),

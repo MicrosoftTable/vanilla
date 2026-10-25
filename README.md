@@ -54,6 +54,8 @@ the first url is the bodycolors url, it gets fetched for the six body colors. ev
 
 the urls have to be on your `assetBase` host. if you need other hosts, add them to `allowedHosts` in `config.php`.
 
+the user agent vanilla sends on those requests is `userAgent` in `config.php` (`Vanilla/1.0` by default). in php, pass `'userAgent'` to the `Avatar` constructor.
+
 if you don't have a bodycolors url you can pass `colors` yourself (`colors=f5cd30,0d69ac,...`, head, torso, left arm, right arm, left leg, right leg). if you pass both, `colors` wins.
 
 you can also skip the charapp and just use ids and colors:
