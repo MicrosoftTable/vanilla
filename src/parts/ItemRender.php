@@ -150,6 +150,7 @@ trait ItemRender {
                 }
             }
             $mesh = $this->meshFrom($P['MeshId'] ?? null);
+            $ownMesh = (bool)$mesh;   // a mesh of its own: its UVs say where a face goes (see bakeFace)
             if ($mesh) {
                 $k = $scale;
             } else {
@@ -176,15 +177,25 @@ trait ItemRender {
                 $flat = new Img($img->w, $img->h);
                 $flat->fillRect(0, 0, $flat->w, $flat->h, [(int)round($c[0] * 255), (int)round($c[1] * 255), (int)round($c[2] * 255)]);
                 $flat->drawOver($img);
-                // the head's own face (a Decal in the head asset, or the standard face) goes on the front of the shape, the way a
-                // face lies on a head: it is drawn into the head texture where the front of the mesh is
+                // the head's own face (a Decal in the head asset, or the standard face) goes onto the head the way Roblox draws a
+                // decal on a mesh: through the mesh's own UVs (see bakeFace)
                 $face = $look['faceSet'] ? $look['face'] : (preg_match('/\bNoFace\b/', (string)($P['Tags'] ?? '')) ? null : ($base["face"] ?? null));
                 if ($face && $shape) {
-                    self::bakeFace($flat, ['pos' => $pos, 'nrm' => $mesh['nrm'], 'uv' => $mesh['uv']], $face, $look['headSize'] ?: [2, 1, 1]);
+                    self::bakeFace($flat, $face);
                 }
                 $headTex = new Texture($flat, true);
             } elseif ($shape && self::meshContent2016($P['TextureId'] ?? null)) {
                 $look['notes'][] = 'head: the texture ' . self::meshContent2016($P['TextureId']) . ' could not be loaded, so the head has no picture on it';
+            }
+            if (!$headTex && $shape && $ownMesh && !preg_match('/\bNoFace\b/', (string)($P['Tags'] ?? ''))) {
+                $face = $look['faceSet'] ? $look['face'] : ($base['face'] ?? null);
+                if ($face) {
+                    $c = $look['colors']['head'];
+                    $flat = new Img($face->w, $face->h);
+                    $flat->fillRect(0, 0, $flat->w, $flat->h, [(int)round($c[0] * 255), (int)round($c[1] * 255), (int)round($c[2] * 255)]);
+                    self::bakeFace($flat, $face);
+                    $headTex = new Texture($flat, true);
+                }
             }
             if (!$headTex && $shape && preg_match('/\bNoFace\b/', (string)($P['Tags'] ?? ''))) {
                 // a head that carries its own face (tag NoFace) never gets the standard face drawn on it: plain head colour instead
@@ -237,91 +248,13 @@ trait ItemRender {
     }
 
     /**
-     * Draw a face decal into a head texture. The decal sits on the front of the head (the side facing -z) the way the standard
-     * face does on the standard head (FACE_BOX, measured against the half width of the shape); every texel that belongs to a
-     * front-facing part of the mesh takes the decal's colour there.
+     * Draw a face decal into a head texture the way Roblox draws a decal on a mesh: it does not project the decal onto the front
+     * of the shape, it draws the mesh a second time with the decal as its texture, through the mesh's own UVs (GeometryGenerator
+     * addFileMesh in the 2016 source). So the decal image covers the mesh's whole 0 to 1 UV square, and the head texture, which
+     * is laid out in the same UV space, just takes the decal over it. Where the decal is see-through the head shows as it was.
      */
-    private static function bakeFace(Img $tex, array $mesh, Img $face, array $size): void {
-        $n = count($mesh['pos']);
-        if ($n < 3) {
-            return;
-        }
-        // the decal is stretched over the front of the head: the width and height of the part of the shape that faces front
-        $lox = $loy = 1e9;
-        $hix = $hiy = -1e9;
-        for ($i = 0; $i < $n; $i++) {
-            if ($mesh['nrm'][$i][2] < -0.5) {
-                $lox = min($lox, $mesh['pos'][$i][0]); $hix = max($hix, $mesh['pos'][$i][0]);
-                $loy = min($loy, $mesh['pos'][$i][1]); $hiy = max($hiy, $mesh['pos'][$i][1]);
-            }
-        }
-        if ($hix <= $lox || $hiy <= $loy) {
-            $lox = -$size[0] / 2; $hix = $size[0] / 2; $loy = -$size[1] / 2; $hiy = $size[1] / 2;
-        }
-        // measured against the picture Roblox draws for this head: the face covers about 1.35 times the front's width (centred)
-        // and 1.045 times its height, starting a little above the top
-        $fdx = ($hix - $lox) * 1.35;
-        $fdy = ($hiy - $loy) * 1.045;
-        $fx1 = ($hix + $lox) / 2 + $fdx / 2;
-        $fy1 = $hiy + ($hiy - $loy) * 0.042;
-        $W = $tex->w;
-        $H = $tex->h;
-        $FW = $face->w;
-        $FH = $face->h;
-        for ($i = 0; $i + 2 < $n; $i += 3) {
-            $nz = ($mesh['nrm'][$i][2] + $mesh['nrm'][$i + 1][2] + $mesh['nrm'][$i + 2][2]) / 3;
-            if ($nz > -0.05) {
-                continue;
-            }
-            $a = $mesh['uv'][$i];
-            $b = $mesh['uv'][$i + 1];
-            $c = $mesh['uv'][$i + 2];
-            $ax = $a[0] * $W; $ay = $a[1] * $H;
-            $bx = $b[0] * $W; $by = $b[1] * $H;
-            $cx = $c[0] * $W; $cy = $c[1] * $H;
-            $den = ($by - $cy) * ($ax - $cx) + ($cx - $bx) * ($ay - $cy);
-            if (abs($den) < 1e-9) {
-                continue;
-            }
-            $x0 = max(0, (int)floor(min($ax, $bx, $cx) - 1));
-            $x1 = min($W - 1, (int)ceil(max($ax, $bx, $cx) + 1));
-            $y0 = max(0, (int)floor(min($ay, $by, $cy) - 1));
-            $y1 = min($H - 1, (int)ceil(max($ay, $by, $cy) + 1));
-            $pa = $mesh['pos'][$i];
-            $pb = $mesh['pos'][$i + 1];
-            $pc = $mesh['pos'][$i + 2];
-            for ($y = $y0; $y <= $y1; $y++) {
-                for ($x = $x0; $x <= $x1; $x++) {
-                    $px = $x + 0.5;
-                    $py = $y + 0.5;
-                    $l1 = (($by - $cy) * ($px - $cx) + ($cx - $bx) * ($py - $cy)) / $den;
-                    $l2 = (($cy - $ay) * ($px - $cx) + ($ax - $cx) * ($py - $cy)) / $den;
-                    $l3 = 1 - $l1 - $l2;
-                    if ($l1 < -0.02 || $l2 < -0.02 || $l3 < -0.02) {
-                        continue;
-                    }
-                    $lx = $l1 * $pa[0] + $l2 * $pb[0] + $l3 * $pc[0];
-                    $ly = $l1 * $pa[1] + $l2 * $pb[1] + $l3 * $pc[1];
-                    $fu = ($fx1 - $lx) / $fdx;
-                    $fv = ($fy1 - $ly) / $fdy;
-                    if ($fu < 0 || $fu > 1 || $fv < 0 || $fv > 1) {
-                        continue;
-                    }
-                    $sx = min($FW - 1, (int)($fu * $FW));
-                    $sy = min($FH - 1, (int)($fv * $FH));
-                    $s = $face->px[$sy * $FW + $sx];
-                    $al = (($s >> 24) & 255) / 255;
-                    if ($al <= 0) {
-                        continue;
-                    }
-                    $d = $tex->px[$y * $W + $x];
-                    $r = (int)round(((($s >> 16) & 255) * $al) + ((($d >> 16) & 255) * (1 - $al)));
-                    $g = (int)round(((($s >> 8) & 255) * $al) + ((($d >> 8) & 255) * (1 - $al)));
-                    $bl = (int)round((($s & 255) * $al) + (($d & 255) * (1 - $al)));
-                    $tex->px[$y * $W + $x] = (255 << 24) | ($r << 16) | ($g << 8) | $bl;
-                }
-            }
-        }
+    private static function bakeFace(Img $tex, Img $face): void {
+        $tex->drawScaled($face, 0, 0, $tex->w, $tex->h);
     }
 
     // the NeckRigAttachment a head asset carries (a Vector3Value or an Attachment, below the mesh or below its part), or null

@@ -180,7 +180,7 @@ trait Character2016 {
                 $flat->fillRect(0, 0, $flat->w, $flat->h, $rgb);
                 $flat->drawOver($image);
                 if ($headMesh && !preg_match('/\bNoFace\b/', (string)($look['headMesh']->props['Tags'] ?? ''))) {
-                    self::bakeFace($flat, $headMesh, $face, $look['headSize'] ?: [2, 1, 1]);
+                    self::bakeFace($flat, $face);   // through the mesh's own UVs, as Roblox draws a decal on a mesh
                 }
                 $headTexture = new Texture($flat);
                 $headTexture->repeat = false;
