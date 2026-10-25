@@ -75,6 +75,8 @@ final class Avatar {
     private $content = [];
     private static $base = null;
     private $exact = false;
+    // optional camera override for one render (see README, "camera"): zoom 1 = the default framing, yaw and pitch in degrees from the default angle
+    private $camZoom = 1.0, $camYaw = 0.0, $camPitch = 0.0;
 
     function __construct(array $opts = []) {
         $this->assetBase = $opts['assetBase'] ?? 'https://example.com/asset/?id=';
@@ -119,8 +121,25 @@ final class Avatar {
         ];
     }
 
+    /** Reads zoom, yaw and pitch from a request. Missing means the default camera. Throws for a value that is not a number or is out of range. */
+    private function selectCamera(array $req): void {
+        $get = function (string $k, float $def, float $lo, float $hi) use ($req): float {
+            if (!isset($req[$k]) || $req[$k] === '') {
+                return $def;
+            }
+            if (!is_numeric($req[$k]) || !is_finite((float)$req[$k]) || (float)$req[$k] < $lo || (float)$req[$k] > $hi) {
+                throw new \InvalidArgumentException("$k is a number from $lo to $hi.");
+            }
+            return (float)$req[$k];
+        };
+        $this->camZoom = $get('zoom', 1.0, 0.25, 4.0);
+        $this->camYaw = $get('yaw', 0.0, -180.0, 180.0);
+        $this->camPitch = $get('pitch', 0.0, -80.0, 80.0);
+    }
+
     function render(array $req): array {
         $this->selectRenderer($req['renderer'] ?? $this->defaultRenderer);
+        $this->selectCamera($req);
         if (isset($req['item'])) {
             if (!empty($req['ids']) || isset($req['charapp'])) {
                 throw new \InvalidArgumentException('use item on its own');

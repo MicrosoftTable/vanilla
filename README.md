@@ -73,8 +73,22 @@ avatar.php?ids=1234,5678&colors=f5cd30,0d69ac,f5cd30,f5cd30,a4bd47,a4bd47&size=1
 | `renderer` | `2012` (default) or experimental `2016`; separate lighting, material highlights, and legacy particle effects |
 | `format` | `png` (default), `webp` or `jpg`. png and webp keep transparency, jpg gets a solid background |
 | `bg` | background colour for jpg as hex, `ffffff` by default |
+| `zoom` | camera zoom, `1` (default) is the normal framing, `1.5` is closer, `0.6` is farther. 0.25 to 4 |
+| `yaw` | swing the camera around the avatar, in degrees from the default angle (-180 to 180). `0` is the default, positive and negative go opposite ways |
+| `pitch` | tilt the camera up or down from the default angle, in degrees (-80 to 80) |
 | `smooth` | `1` (default) or `0` for hard edges |
 | `sid` | 16 to 32 hex chars. a new render with the same sid deletes the previous one |
+
+### camera
+
+`zoom`, `yaw` and `pitch` change the default camera for one render, so you can frame things your own way. leave them out and you get the usual picture. they work on body renders, headshots (`view=head`) and single items, in the 2012 renderer:
+
+```
+avatar.php?ids=1234&yaw=35&pitch=10&zoom=1.2
+avatar.php?ids=1234&view=head&yaw=-25
+```
+
+zoom is applied after the automatic fit, so a zoom above 1 can crop the avatar on purpose. in php, pass `'zoom'`, `'yaw'` and `'pitch'` to `render()`. the 2016 renderer's body camera and the close-up of a lone body part ignore yaw and pitch.
 
 ### rendering a single item
 

@@ -1,5 +1,5 @@
 <?php
-// get avatar.php with charapp or ids or item, colors, size, view, smooth, renderer, format, bg and sid
+// get avatar.php with charapp or ids or item, colors, size, view, zoom, yaw, pitch, smooth, renderer, format, bg and sid
 declare(strict_types=1);
 umask(0077);
 require __DIR__ . '/src/Vanilla.php';
@@ -122,6 +122,16 @@ $view = $q['view'] ?? 'body';
 if ($view !== 'body' && $view !== 'head') {
     fail(400, 'view is body or head.');
 }
+$cam = [];
+foreach (['zoom' => [0.25, 4], 'yaw' => [-180, 180], 'pitch' => [-80, 80]] as $k => [$lo, $hi]) {
+    if (!isset($q[$k]) || $q[$k] === '') {
+        continue;
+    }
+    if (!is_numeric($q[$k]) || (float)$q[$k] < $lo || (float)$q[$k] > $hi) {
+        fail(400, "$k is a number from $lo to $hi.");
+    }
+    $cam[$k] = (float)$q[$k];
+}
 $sid = $q['sid'] ?? '';
 if ($sid !== '' && !preg_match('/^[0-9a-f]{16,32}$/D', $sid)) {
     fail(400, 'sid is 16-32 hex characters.');
@@ -137,7 +147,7 @@ $key = hash(
     RENDER_VERSION . '|' . ($item !== null ? 'item' . $item : implode(',', $ids) . '|' . implode(
         ',',
         $colors ?? Vanilla\Avatar::DEFAULT_COLORS
-    ) . '|' . $view) . '|' . $size . '|' . ($smooth ? 's' : 'h') . '|' . $renderer . '|' . $format . ($format === 'jpg' ? '|' . $bg : '')
+    ) . '|' . $view) . '|' . $size . '|' . ($smooth ? 's' : 'h') . '|' . $renderer . '|' . $format . ($format === 'jpg' ? '|' . $bg : '') . ($cam ? '|cam' . json_encode($cam) : '')
 );
 $file = "$cacheDir/render-$key.$format";
 $etag = '"' . substr($key, 0, 32) . '"';
@@ -272,8 +282,8 @@ try {
         'cacheDir' => $cacheDir,
     ]);
     $r = $avatar->render($item !== null
-        ? ['item' => $item, 'size' => $size, 'smooth' => $smooth, 'renderer' => $renderer]
-        : ['ids' => $ids, 'colors' => $colors, 'size' => $size, 'smooth' => $smooth, 'view' => $view, 'renderer' => $renderer]);
+        ? ['item' => $item, 'size' => $size, 'smooth' => $smooth, 'renderer' => $renderer] + $cam
+        : ['ids' => $ids, 'colors' => $colors, 'size' => $size, 'smooth' => $smooth, 'view' => $view, 'renderer' => $renderer] + $cam);
 } catch (InvalidArgumentException $e) {
     fail(400, $e->getMessage());
 } catch (Throwable $e) {

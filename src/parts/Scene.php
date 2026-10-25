@@ -24,6 +24,16 @@ trait Scene {
         return null;
     }
 
+    /** Swings a camera direction (a unit vector from the subject to the camera) by the caller's yaw and pitch. No override: unchanged. */
+    private function turnCamera(array $d): array {
+        if ($this->camYaw == 0.0 && $this->camPitch == 0.0) {
+            return $d;
+        }
+        $az = atan2($d[0], $d[2]) + deg2rad($this->camYaw);
+        $el = max(-deg2rad(85), min(deg2rad(85), atan2($d[1], sqrt($d[0] * $d[0] + $d[2] * $d[2])) + deg2rad($this->camPitch)));
+        return [cos($el) * sin($az), sin($el), cos($el) * cos($az)];
+    }
+
     private function draw(array &$look, int $W, int $H, int $SS, string $view = 'body'): string {
         if ($view === 'head') {
             $look['tool'] = null;   // a headshot never shows gear: it is held in the hand, not worn on the head
@@ -123,7 +133,7 @@ trait Scene {
             $center = [$hp[0], $hp[1] + self::HEAD_AIM, $hp[2]];
             $fov = self::HEAD_FOV * M_PI / 180;
             $dist = self::HEAD_DIST;
-            $cd = self::norm(self::HEAD_DIR);
+            $cd = $this->turnCamera(self::norm(self::HEAD_DIR));
             // A hat that reaches well out in front of the face (an astronaut helmet, a big cap brim) ends up very close to the lens,
             // and perspective then blows it up and bends it. Back the camera off until the nearest hat point is a sane distance away
             // and narrow the lens by the same ratio, so the head keeps its size but the hat is not warped.
@@ -187,7 +197,7 @@ trait Scene {
             // a hat or gear on its own is drawn through a narrow lens: the wide thumbnail lens stretches tall, close things (helmets)
             $fov = ($only === 'items' ? min(self::CAM_FOV, self::ITEM_THUMB_FOV) : self::CAM_FOV) * M_PI / 180;
             $dist = self::CAM_ZOOM * $radius / tan($fov / 2);
-            $cd = self::norm(self::CAM_DIR);
+            $cd = $this->turnCamera(self::norm(self::CAM_DIR));
             $eye = [$center[0] + $cd[0] * $dist, $center[1] + $cd[1] * $dist, $center[2] + $cd[2] * $dist];
             $camUp = [0, 1, 0];
             if ($only === 'items' && count($items) === 1 && !empty($items[0]['thumbCam'])) { try {
@@ -285,6 +295,12 @@ trait Scene {
                 $ty = -$s * ($ny0 + $ny1) / 2;
                 $vp = self::mul4([$s, 0, 0, 0, 0, $s, 0, 0, 0, 0, 1, 0, $tx, $ty, 0, 1], $vp);
             }
+        }
+
+        if ($this->camZoom != 1.0) {
+            // the caller's zoom, applied last so the automatic fit above does not undo it (about the middle of the picture)
+            $z = $this->camZoom;
+            $vp = self::mul4([$z, 0, 0, 0, 0, $z, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1], $vp);
         }
 
         if ($this->renderer === '2016') {
