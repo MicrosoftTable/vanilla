@@ -27,6 +27,9 @@ trait Meshes {
             }
             return ['pos' => $pos, 'nrm' => $nrm, 'uv' => $uv];
         }
+        if ($major === 6 || $major === 7) {
+            return self::parseChunkedMesh($bytes);
+        }
         $at = 13;
         $len = strlen($bytes);
         $hs = unpack('v', $bytes, $at)[1];
@@ -100,6 +103,61 @@ trait Meshes {
             }
         }
         return ['pos' => $pos, 'nrm' => $nrm, 'uv' => $uv];
+    }
+
+    /** version 6 and 7: named chunks, the geometry inside COREMESH is draco compressed */
+    private static function parseChunkedMesh(string $bytes): array {
+        $o = 13;
+        $n = strlen($bytes);
+        while ($o + 16 <= $n) {
+            $name = rtrim(substr($bytes, $o, 8), "\0");
+            $size = unpack('V', $bytes, $o + 12)[1];
+            $o += 16;
+            if ($name !== 'COREMESH') {
+                $o += $size;
+                continue;
+            }
+            if ($size < 8 || $o + $size > $n) {
+                throw new \RuntimeException('truncated mesh');
+            }
+            $dl = unpack('V', $bytes, $o)[1];
+            $m = Draco::decode($bytes, $o + 4, min($dl, $size - 4));
+            $P = null;
+            $N = null;
+            $U = null;
+            foreach ($m['attrs'] as $a) {
+                if ($a['type'] === 0 && $a['nc'] === 3 && !$P) {
+                    $P = $a['v'];
+                } elseif ($a['type'] === 3 && $a['nc'] === 2 && !$U) {
+                    $U = $a['v'];
+                } elseif (($a['type'] === 1 || $a['type'] === 4) && $a['nc'] === 3 && !$N && $a['v'] && abs(array_sum(array_map(function ($x) {
+                    return $x * $x;
+                }, $a['v'][0])) - 1) < 0.1) {
+                    $N = $a['v'];
+                }
+            }
+            if (!$P) {
+                throw new \RuntimeException('mesh has no positions');
+            }
+            if (count($m['faces']) * 3 > self::MAX_MESH_VERTS) {
+                throw new \RuntimeException('a mesh is too large');
+            }
+            $pos = [];
+            $nrm = [];
+            $uv = [];
+            foreach ($m['faces'] as $f) {
+                foreach ($f as $i) {
+                    if (!isset($P[$i])) {
+                        throw new \RuntimeException('bad mesh index');
+                    }
+                    $pos[] = $P[$i];
+                    $nrm[] = $N[$i] ?? [0.0, 1.0, 0.0];
+                    $uv[] = isset($U[$i]) ? [$U[$i][0], 1 - $U[$i][1]] : [0.0, 0.0];
+                }
+            }
+            return ['pos' => $pos, 'nrm' => $nrm, 'uv' => $uv];
+        }
+        throw new \RuntimeException('mesh has no geometry');
     }
 
     static function meshBounds(array $m): array {

@@ -1,7 +1,7 @@
 <?php
 namespace Vanilla;
 
-foreach (['BrickColors', 'Net', 'Inst', 'Rbxm', 'Img', 'PngStream', 'Texture', 'CharApp'] as $file) {
+foreach (['BrickColors', 'Net', 'Inst', 'Rbxm', 'Img', 'PngStream', 'Texture', 'Draco', 'CharApp'] as $file) {
     require_once __DIR__ . '/' . $file . '.php';
 }
 
