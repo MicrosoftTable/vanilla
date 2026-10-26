@@ -197,9 +197,7 @@ trait ReferenceRaster {
                             } else {
                                 $t = $tex->sample($u, $v);
                             }
-                            if (!empty($T['blend'])) {
-                                $ta = $t[3];
-                            } elseif ($t[3] < 0.5 && $tex->cut) {
+                            if (empty($T['blend']) && $t[3] < 0.5 && $tex->cut) {
                                 continue;
                             }
                             $ar = $t[0] * $tint[0];

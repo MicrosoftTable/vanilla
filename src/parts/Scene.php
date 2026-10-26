@@ -34,12 +34,9 @@ trait Scene {
         return [cos($el) * sin($az), sin($el), cos($el) * cos($az)];
     }
 
-    /** Is this hat or gear see-through: a Handle with Transparency, or a texture whose alpha is meant to show (blended, not cut out). */
+    /** Is this hat or gear see-through: only when its Handle has Transparency, the way roblox does it. */
     private static function blendsItem(array $it): bool {
-        if (($it['alpha'] ?? 1.0) < 0.999) {
-            return true;
-        }
-        return !empty($it['tex']) && $it['tex']->hasAlpha && $it['tex']->cut;
+        return ($it['alpha'] ?? 1.0) < 0.999;
     }
 
     /** Where a package's right hand is, in the arm's own space: a RightGripAttachment under its CharacterMesh, or null. */
