@@ -169,6 +169,7 @@ trait ReferenceRaster {
                         if ($z > $zb[$idx] || $z < 0 || $z > 1) {
                             continue;
                         }
+                        $ta = 1.0;
                         $iw = $iwA * $x + $iwB * $y + $iwC;
                         $w = 1 / $iw;
                         $g0 = ($P[2][0] * $x + $P[2][1] * $y + $P[2][2]) * $w;
@@ -196,7 +197,9 @@ trait ReferenceRaster {
                             } else {
                                 $t = $tex->sample($u, $v);
                             }
-                            if ($t[3] < 0.5 && $tex->cut) {
+                            if (!empty($T['blend'])) {
+                                $ta = $t[3];
+                            } elseif ($t[3] < 0.5 && $tex->cut) {
                                 continue;
                             }
                             $ar = $t[0] * $tint[0];
@@ -259,6 +262,21 @@ trait ReferenceRaster {
                         $R8 = $r >= 1 ? 255 : ($r <= 0 ? 0 : (int)($r * 255 + 0.5));
                         $G8 = $gg >= 1 ? 255 : ($gg <= 0 ? 0 : (int)($gg * 255 + 0.5));
                         $B8 = $bb >= 1 ? 255 : ($bb <= 0 ? 0 : (int)($bb * 255 + 0.5));
+                        if (!empty($T['blend'])) {
+                            // see-through: blended over what is already there, and it does not hide what comes after it
+                            $al = min(1.0, $ta * $T['alpha']);
+                            if ($al <= 0.003) {
+                                continue;
+                            }
+                            $ia = 1 - $al;
+                            $dc = $col[$idx];
+                            $nr = (int)round($R8 * $al + (($dc >> 16) & 255) * $ia);
+                            $ng = (int)round($G8 * $al + (($dc >> 8) & 255) * $ia);
+                            $nb = (int)round($B8 * $al + ($dc & 255) * $ia);
+                            $na = (int)round($al * 255 + (($dc >> 24) & 255) * $ia);
+                            $col[$idx] = (min(255, $na) << 24) | (min(255, $nr) << 16) | (min(255, $ng) << 8) | min(255, $nb);
+                            continue;
+                        }
                         $zb[$idx] = $z;
                         $col[$idx] = (255 << 24) | ($R8 << 16) | ($G8 << 8) | $B8;
                     }

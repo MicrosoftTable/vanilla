@@ -233,6 +233,9 @@ trait LookBuilder {
             'fx' => array_values(array_filter($h->children, function ($c) {
             return in_array($c->cls, ['Fire', 'Smoke', 'Sparkles'], true);
         }))];
+        // a see-through hat: the Handle's Transparency (0 solid ... 1 invisible) becomes the item's opacity
+        $tr = $h->props['Transparency'] ?? 0;
+        $item['alpha'] = is_numeric($tr) ? max(0.0, min(1.0, 1.0 - (float)$tr)) : 1.0;
         $P = $sm ? $sm->props : [];
         if ($sm) {
             $item['scale'] = self::v3($P['Scale'] ?? null, [1, 1, 1]);

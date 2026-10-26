@@ -146,6 +146,28 @@ trait FastRaster {
             $B8 = $bb >= 1 ? 255 : ($bb <= 0 ? 0 : (int)($bb * 255 + 0.5));
             return (255 << 24) | ($R8 << 16) | ($G8 << 8) | $B8;
         };
+        // the opacity of a see-through triangle at a point: its texture's alpha times the Handle's opacity
+        $alphaAt = function (array $T, float $x, float $y): float {
+            $a = $T['alpha'];
+            if ($T['mode'] !== 3 || !$T['tex']) {
+                return $a;
+            }
+            $P = $T['P'];
+            $iwA = $P[0][0];
+            $iwB = $P[0][1];
+            $w = 1 / ($iwA * $x + $iwB * $y + $P[0][2]);
+            $u = ($P[5][0] * $x + $P[5][1] * $y + $P[5][2]) * $w;
+            $v = ($P[6][0] * $x + $P[6][1] * $y + $P[6][2]) * $w;
+            $t = $T['tex']->sample(
+                $u,
+                $v,
+                ($P[5][0] - $u * $iwA) * $w,
+                ($P[6][0] - $v * $iwA) * $w,
+                ($P[5][1] - $u * $iwB) * $w,
+                ($P[6][1] - $v * $iwB) * $w
+            );
+            return $t[3] * $a;
+        };
         $alphaOK = function (array $T, float $x, float $y): bool {
             $P = $T['P'];
             $iwA = $P[0][0];
@@ -167,6 +189,7 @@ trait FastRaster {
         $TA = [];
         $isCut = [];
         $isFx = [];
+        $isBl = [];
         $hasFx = false;
         foreach ($tris as $ti => $T) {
             [$a0, $b0, $c0, $a1, $b1, $c1] = $T['e'];
@@ -179,7 +202,8 @@ trait FastRaster {
             $TA[$ti] = [$a0, $b0, $c0, $a1, $b1, $c1, $a2, $b2, $c2, $h0 > 0 ? 1 / $h0 : 0.0, $h1 > 0 ? 1 / $h1 : 0.0, $h2 > 0 ? 1 / $h2 : 0.0,
                 $T['P'][1][0], $T['P'][1][1], $T['P'][1][2],
                 max(0, intdiv($T['bx0'], $SS)), min($W - 1, intdiv($T['bx1'], $SS)), max(0, intdiv($T['by0'], $SS)), min($H - 1, intdiv($T['by1'], $SS))];
-            $isFx[$ti] = $T['mode'] === 4;
+            $isBl[$ti] = !empty($T['blend']);
+            $isFx[$ti] = $T['mode'] === 4 || $isBl[$ti];   // deferred: drawn after everything solid
             if ($isFx[$ti]) {
                 $hasFx = true;
             }
@@ -314,6 +338,64 @@ trait FastRaster {
                         }
                     }
                 }
+            }
+        };
+
+        // a see-through triangle blended into the samples it covers (they already hold what is solid behind it)
+        $blendMesh = function (array $T, array $c, int $X, int $Y, array &$s, int $k0) use ($SS, $EPS, &$sz, $shade, $alphaAt) {
+            [$a0, $b0, $c0, $a1, $b1, $c1, , , , , , , $zA, $zB, $zC] = $c;
+            $bx = $X * $SS;
+            $by = $Y * $SS;
+            $cov = [];
+            $sx = 0.0;
+            $sy = 0.0;
+            for ($j = 0; $j < $SS; $j++) {
+                $y = $by + $j + 0.5;
+                for ($i = 0; $i < $SS; $i++) {
+                    $x = $bx + $i + 0.5;
+                    $l0 = $a0 * $x + $b0 * $y + $c0;
+                    if ($l0 < $EPS) {
+                        continue;
+                    }
+                    $l1 = $a1 * $x + $b1 * $y + $c1;
+                    if ($l1 < $EPS || 1 - $l0 - $l1 < $EPS) {
+                        continue;
+                    }
+                    $z = $zA * $x + $zB * $y + $zC;
+                    $k = $j * $SS + $i;
+                    if ($z > $sz[$k0 + $k] || $z < 0 || $z > 1) {
+                        continue;
+                    }
+                    $cov[] = $k;
+                    $sx += $x;
+                    $sy += $y;
+                }
+            }
+            $n = count($cov);
+            if (!$n) {
+                return;
+            }
+            $xc = $sx / $n;
+            $yc = $sy / $n;
+            $al = $alphaAt($T, $xc, $yc);
+            if ($al <= 0.003) {
+                return;
+            }
+            if ($al > 1) {
+                $al = 1.0;
+            }
+            $col = $shade($T, $xc, $yc);
+            $pr = (($col >> 16) & 255) * $al;
+            $pg = (($col >> 8) & 255) * $al;
+            $pb = ($col & 255) * $al;
+            $ia = 1 - $al;
+            foreach ($cov as $k) {
+                $dc = $s[$k];
+                $nr = (int)round($pr + (($dc >> 16) & 255) * $ia);
+                $ng = (int)round($pg + (($dc >> 8) & 255) * $ia);
+                $nb = (int)round($pb + ($dc & 255) * $ia);
+                $na = (int)round($al * 255 + (($dc >> 24) & 255) * $ia);
+                $s[$k] = (min(255, $na) << 24) | (min(255, $nr) << 16) | (min(255, $ng) << 8) | min(255, $nb);
             }
         };
 
@@ -741,7 +823,11 @@ trait FastRaster {
                     }
                     if (isset($pl[$p])) {
                         foreach ($pl[$p] as $ti) {
-                            $blendFx($tris[$ti], $TA[$ti], $X, $Y, $s, $k0);
+                            if ($isBl[$ti]) {
+                                $blendMesh($tris[$ti], $TA[$ti], $X, $Y, $s, $k0);
+                            } else {
+                                $blendFx($tris[$ti], $TA[$ti], $X, $Y, $s, $k0);
+                            }
                         }
                     }
                     if ($SS === 4) {

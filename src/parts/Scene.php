@@ -34,6 +34,54 @@ trait Scene {
         return [cos($el) * sin($az), sin($el), cos($el) * cos($az)];
     }
 
+    /** Is this hat or gear see-through: a Handle with Transparency, or a texture whose alpha is meant to show (blended, not cut out). */
+    private static function blendsItem(array $it): bool {
+        if (($it['alpha'] ?? 1.0) < 0.999) {
+            return true;
+        }
+        return !empty($it['tex']) && $it['tex']->hasAlpha && $it['tex']->cut;
+    }
+
+    /** Where a package's right hand is, in the arm's own space: a RightGripAttachment under its CharacterMesh, or null. */
+    private static function packageGripOf(array $look): ?array {
+        $cm = $look['bodyMeshes']['rightArm'] ?? null;
+        if (!$cm) {
+            return null;
+        }
+        foreach ($cm->children as $c) {
+            if ($c->cls === 'Attachment' && strtolower((string)$c->name) === 'rightgripattachment') {
+                $p = self::cfFrom($c->props['CFrame'] ?? ($c->props['CoordinateFrame'] ?? null))['p'];
+                if (abs($p[0]) < 4 && abs($p[1]) < 4 && abs($p[2]) < 4) {
+                    return $p;
+                }
+            }
+        }
+        return null;
+    }
+
+    /** The shoulder angle that points $grip (arm space) the same way a normal hand points when the arm is raised as $stdArm. */
+    private static function raiseForGrip(array $stdArm, array $grip): float {
+        $S = self::cfApply(self::cfMul(self::CF([0, 3, 0]), self::SHOULDER_R()), [0, 0, 0]);
+        $dir = function (array $v) use ($S) {
+            $d = [$v[0] - $S[0], $v[1] - $S[1], $v[2] - $S[2]];
+            $l = sqrt($d[1] * $d[1] + $d[2] * $d[2]) ?: 1;
+            return [$d[1] / $l, $d[2] / $l];   // the arm turns about x, so only y and z matter
+        };
+        $want = $dir(self::cfApply($stdArm, self::RIGHT_GRIP_C0()['p']));
+        $best = M_PI / 2;
+        $bestScore = INF;
+        for ($i = -360; $i <= 360; $i++) {
+            $a = $i * M_PI / 360;
+            $h = $dir(self::cfApply(self::partCFs(true, $a)['Right Arm'], $grip));
+            $score = ($h[0] - $want[0]) ** 2 + ($h[1] - $want[1]) ** 2;
+            if ($score < $bestScore) {
+                $bestScore = $score;
+                $best = $a;
+            }
+        }
+        return $best;
+    }
+
     private function draw(array &$look, int $W, int $H, int $SS, string $view = 'body'): string {
         if ($view === 'head') {
             $look['tool'] = null;   // a headshot never shows gear: it is held in the hand, not worn on the head
@@ -48,6 +96,13 @@ trait Scene {
             [$base, $partTex, $headTex] = $this->characterBase2012($base, $look);
         }
         $cfs = self::partCFs((bool)$look['tool'], $this->renderer === '2016' ? 1.57 : M_PI / 2);
+        // a package right arm can say where its hand is (a RightGripAttachment under its CharacterMesh). The arm is then raised
+        // just far enough to put that hand straight out in front, and the gear goes in the hand, held the usual way up.
+        $stdArm = $cfs['Right Arm'];
+        $handGrip = $look['tool'] ? self::packageGripOf($look) : null;
+        if ($handGrip) {
+            $cfs = self::partCFs(true, self::raiseForGrip($stdArm, $handGrip));
+        }
         $items = [];
         foreach ($look['accessories'] as $acc) {
             $h = self::handleOf($acc);
@@ -72,7 +127,9 @@ trait Scene {
                 $it = $this->buildHandleDrawable(
                     $th,
                     self::cfMul(
-                        self::cfMul($cfs['Right Arm'], self::RIGHT_GRIP_C0()),
+                        $handGrip
+                            ? self::CF(self::cfApply($cfs['Right Arm'], $handGrip), self::cfMul($stdArm, self::RIGHT_GRIP_C0())['R'])
+                            : self::cfMul($cfs['Right Arm'], self::RIGHT_GRIP_C0()),
                         self::cfInv(self::gripCF($look['tool']))
                     ),
                     $look['notes']
@@ -346,7 +403,7 @@ trait Scene {
         }
         foreach ($items as $it) {
             if ($it['tex']) {
-                $calls[] = [$it['geom'], $it['cf'], 3, null, $it['tex'], false, null, $it['tint'], $it['material'] ?? 256];
+                $calls[] = [$it['geom'], $it['cf'], 3, null, $it['tex'], false, null, $it['tint'], $it['material'] ?? 256, $it['alpha'] ?? 1.0, self::blendsItem($it)];
             } else {
                 $calls[] = [
                     $it['geom'],
@@ -361,14 +418,38 @@ trait Scene {
                     false,
                     null,
                     [1, 1, 1],
-                    $it['material'] ?? 256
+                    $it['material'] ?? 256,
+                    $it['alpha'] ?? 1.0,
+                    self::blendsItem($it)
                 ];
             }
         }
-        $tris = [];
+        $solid = [];
+        $glass = [];
         foreach ($calls as $c) {
-            $this->setup($tris, $c, $vp, $eye, $Wss, $Hss, $faceBox);
+            $tt = [];
+            $this->setup($tt, $c, $vp, $eye, $Wss, $Hss, $faceBox);
+            if (!empty($c[10])) {
+                foreach ($tt as $q) {
+                    $glass[] = $q;
+                }
+            } else {
+                foreach ($tt as $q) {
+                    $solid[] = $q;
+                }
+            }
         }
+        // see-through triangles (a hat's soft texture alpha, or a Handle with Transparency) are blended over everything solid,
+        // the farthest first, the way Roblox draws them
+        foreach ($glass as &$q) {
+            $q['blend'] = true;
+            $q['depth'] = $q['P'][1][0] * (($q['bx0'] + $q['bx1']) / 2 + 0.5) + $q['P'][1][1] * (($q['by0'] + $q['by1']) / 2 + 0.5) + $q['P'][1][2];
+        }
+        unset($q);
+        usort($glass, function ($a, $b) {
+            return $b['depth'] <=> $a['depth'];
+        });
+        $tris = array_merge($solid, $glass);
         $cz = self::norm(self::sub($eye, $center));
         $cx = self::norm(self::cross([0, 1, 0], $cz));
         $cy = self::cross($cz, $cx);
@@ -378,7 +459,7 @@ trait Scene {
         $fast = !$this->exact;
         if ($fast && $SS === 1) {
             foreach ($tris as $T) {
-                if ($T['mode'] === 4) {
+                if ($T['mode'] === 4 || !empty($T['blend'])) {
                     $fast = false;
                     break;
                 }
@@ -499,7 +580,7 @@ trait Scene {
             $tris[] = [
                 'bx0' => max(0, (int)ceil(min($x0, $x1, $x2) - 0.5)), 'bx1' => min($Wss - 1, (int)floor(max($x0, $x1, $x2) - 0.5)),
                 'by0' => max(0, (int)ceil(min($y0, $y1, $y2) - 0.5)), 'by1' => min($Hss - 1, (int)floor(max($y0, $y1, $y2) - 0.5)),
-                'e' => [$a0, $b0, $c0, $a1, $b1, $c1], 'P' => $P, 'mode' => $mode, 'color' => $color, 'tex' => $tex, 'studs' => $studs, 'half' => $half, 'tint' => $tint, 'specular' => $specular, 'specPower' => $specPower, 'lightingOffset' => $lightingOffset,
+                'e' => [$a0, $b0, $c0, $a1, $b1, $c1], 'P' => $P, 'mode' => $mode, 'color' => $color, 'tex' => $tex, 'studs' => $studs, 'half' => $half, 'tint' => $tint, 'specular' => $specular, 'specPower' => $specPower, 'lightingOffset' => $lightingOffset, 'alpha' => (float)($call[9] ?? 1.0),
             ];
         }
     }
