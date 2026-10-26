@@ -265,6 +265,9 @@ trait ReferenceRaster {
                         if (!empty($T['blend'])) {
                             // see-through: blended over what is already there, and it does not hide what comes after it
                             $al = min(1.0, $ta * $T['alpha']);
+                            if (!empty($T['sq'])) {
+                                $al *= $al;
+                            }
                             if ($al <= 0.003) {
                                 continue;
                             }

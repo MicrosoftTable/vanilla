@@ -149,8 +149,9 @@ trait FastRaster {
         // the opacity of a see-through triangle at a point: its texture's alpha times the Handle's opacity
         $alphaAt = function (array $T, float $x, float $y): float {
             $a = $T['alpha'];
+            // the 2012 renderer drew see-through things about twice as faint, so its opacity is squared
             if ($T['mode'] !== 3 || !$T['tex']) {
-                return $a;
+                return $T['sq'] ? $a * $a : $a;
             }
             $P = $T['P'];
             $iwA = $P[0][0];
@@ -166,7 +167,8 @@ trait FastRaster {
                 ($P[5][1] - $u * $iwB) * $w,
                 ($P[6][1] - $v * $iwB) * $w
             );
-            return $t[3] * $a;
+            $o = $t[3] * $a;
+            return $T['sq'] ? $o * $o : $o;
         };
         $alphaOK = function (array $T, float $x, float $y): bool {
             $P = $T['P'];

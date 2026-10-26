@@ -580,7 +580,7 @@ trait Scene {
             $tris[] = [
                 'bx0' => max(0, (int)ceil(min($x0, $x1, $x2) - 0.5)), 'bx1' => min($Wss - 1, (int)floor(max($x0, $x1, $x2) - 0.5)),
                 'by0' => max(0, (int)ceil(min($y0, $y1, $y2) - 0.5)), 'by1' => min($Hss - 1, (int)floor(max($y0, $y1, $y2) - 0.5)),
-                'e' => [$a0, $b0, $c0, $a1, $b1, $c1], 'P' => $P, 'mode' => $mode, 'color' => $color, 'tex' => $tex, 'studs' => $studs, 'half' => $half, 'tint' => $tint, 'specular' => $specular, 'specPower' => $specPower, 'lightingOffset' => $lightingOffset, 'alpha' => (float)($call[9] ?? 1.0),
+                'e' => [$a0, $b0, $c0, $a1, $b1, $c1], 'P' => $P, 'mode' => $mode, 'color' => $color, 'tex' => $tex, 'studs' => $studs, 'half' => $half, 'tint' => $tint, 'specular' => $specular, 'specPower' => $specPower, 'lightingOffset' => $lightingOffset, 'alpha' => (float)($call[9] ?? 1.0), 'sq' => $this->renderer === '2012',
             ];
         }
     }
