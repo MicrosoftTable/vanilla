@@ -1,9 +1,8 @@
 <?php
 namespace Vanilla;
 
-// rendering one item on its own: hats and gear alone, heads and faces alone, clothing on a gray avatar, packages on a full avatar
 trait ItemRender {
-    private $partImgCache = [];   // body part textures already put together in this run (parts often share one)
+    private $partImgCache = [];
 
     private static function packageIds(string $body): array {
         $t = trim($body);
@@ -43,7 +42,6 @@ trait ItemRender {
         }
         $look['accessories'] = array_slice($look['accessories'], 0, self::MAX_ACCESSORIES);
         if (!empty($look['pkgColors'])) {
-            // the package's own body colours (what its thumbnail was drawn with): head, torso, left arm, right arm, left leg, right leg
             foreach (['head', 'torso', 'leftArm', 'rightArm', 'leftLeg', 'rightLeg'] as $j => $k) {
                 $look['colors'][$k] = self::parseColor($look['pkgColors'][$j]);
             }
@@ -57,7 +55,7 @@ trait ItemRender {
             $look['only'] = 'head';
         } elseif (!$worn && !$clothes && !$look['faceSet'] && !$look['headMesh'] && count($look['bodyMeshes']) === 1
             && in_array(array_key_first($look['bodyMeshes']), ['torso', 'rightArm', 'leftArm', 'rightLeg', 'leftLeg'], true)) {
-            $look['only'] = 'part:' . array_key_first($look['bodyMeshes']);   // one body part: close and straight on
+            $look['only'] = 'part:' . array_key_first($look['bodyMeshes']);
             $look['pkgview'] = true;
         } elseif ($clothes && !$body && !$worn && !$look['faceSet']) {
             $gray = self::brick(194);
@@ -67,8 +65,6 @@ trait ItemRender {
         } elseif (!$worn && !$clothes && !$body && !$look['faceSet']) {
             throw new \InvalidArgumentException('item is not a hat, gear, face, head, shirt, pants, t-shirt or package' . ($look['notes'] ? ' (' . $look['notes'][0] . ')' : ''));
         }
-        // A package drawn on its own, like Roblox's catalog did: the parts the package brings are drawn with the
-        // grey and blue checkered template (so the shape shows), and every other body part is plain white.
         if ($look['only'] === '' && $body && !$clothes) {
             $look['pkgview'] = true;
         }
@@ -80,8 +76,6 @@ trait ItemRender {
         return ['png' => $png, 'notes' => $look['notes']];
     }
 
-    // 2012 package parts: the part meshes and textures from CharacterMesh and a head from a head asset
-    // returns the base with the new geometry plus a texture for each replaced part and one for the head
     private function characterBase2012(array $base, array &$look): array {
         $tex = [];
         $headTex = null;
@@ -100,7 +94,7 @@ trait ItemRender {
             if (!$cm) {
                 if ($pkg) {
                     if (empty($look['pkgColors'])) {
-                        $look['colors'][$name] = self::brick(1);   // not part of the package: plain white (the BrickColor "White")
+                        $look['colors'][$name] = self::brick(1);
                     }
                     $tex[$part] = false;
                 }
@@ -113,17 +107,14 @@ trait ItemRender {
             }
             $base[$part] = $mesh;
             if ($pkg && empty($look['pkgColors'])) {
-                $look['colors'][$name] = self::brick(24);   // the package's own part sits on skin yellow (what its texture was made for), not on the default torso blue
+                $look['colors'][$name] = self::brick(24);
             }
             $img = $this->partImage($cm->props, $look['colors'][$name], $pkg);
             if ($img) {
                 $tex[$part] = new Texture($img);
                 $tex[$part]->repeat = false;
             } else {
-                // no texture of its own: lay the mesh onto the standard template, the way a shirt lies on the normal part.
-                // Worn, it then takes the body colour, shirt and pants; drawn as a package item it takes the checkered template.
                 if ($pkg && $tpl) {
-                    // a package picture: the checker is laid on by the shape itself (see checkerMesh), so it can not stretch
                     [$base[$part], $tile] = self::checkerMesh($mesh, $tpl);
                     $tex[$part] = new Texture($tile);
                 } else {
@@ -135,22 +126,20 @@ trait ItemRender {
         $shape = $look['headMesh'];
         $cm = $look['bodyMeshes']['head'] ?? null;
         if ($pkg && !$shape && !$cm && empty($look['pkgColors'])) {
-            $look['colors']['head'] = self::brick(1);   // a head the package does not bring is white too
+            $look['colors']['head'] = self::brick(1);
         }
         if ($shape || $cm) {
             $P = $shape ? $shape->props : $cm->props;
             $scale = $shape ? self::v3($P['Scale'] ?? null, [1.25, 1.25, 1.25]) : [1.25, 1.25, 1.25];
             $off = $shape ? self::v3($P['Offset'] ?? null, [0, 0, 0]) : [0, 0, 0];
             if ($shape) {
-                // a head that says where its neck is (NeckRigAttachment) sits on the body by that point, not by the middle of the head:
-                // the classic head's neck is at (0, -0.5, 0), so a head whose neck is lower sits higher
                 $neck = self::neckRig($shape);
                 if ($neck) {
                     $off = [$off[0] - $neck[0], $off[1] - ($neck[1] + 0.5), $off[2] - $neck[2]];
                 }
             }
             $mesh = $this->meshFrom($P['MeshId'] ?? null);
-            $ownMesh = (bool)$mesh;   // a mesh of its own: its UVs say where a face goes (see bakeFace)
+            $ownMesh = (bool)$mesh;
             if ($mesh) {
                 $k = $scale;
             } else {
@@ -168,17 +157,13 @@ trait ItemRender {
             if ($shape) {
                 $img = $this->image(self::meshContent2016($P['TextureId'] ?? null));
             } else {
-                // a head from a CharacterMesh: its ids are numbers, a base texture with an overlay on top (like the other parts)
                 $img = $this->partImage($P, [1, 1, 1]);
             }
             if ($img) {
-                // a head texture with see-through parts sits on the head colour (the wearer's, or the package's), like a body part's
                 $c = $look['colors']['head'];
                 $flat = new Img($img->w, $img->h);
                 $flat->fillRect(0, 0, $flat->w, $flat->h, [(int)round($c[0] * 255), (int)round($c[1] * 255), (int)round($c[2] * 255)]);
                 $flat->drawOver($img);
-                // the head's own face (a Decal in the head asset, or the standard face) goes onto the head the way Roblox draws a
-                // decal on a mesh: through the mesh's own UVs (see bakeFace)
                 $face = $look['faceSet'] ? $look['face'] : (preg_match('/\bNoFace\b/', (string)($P['Tags'] ?? '')) ? null : ($base["face"] ?? null));
                 if ($face && $shape) {
                     self::bakeFace($flat, $face);
@@ -198,7 +183,6 @@ trait ItemRender {
                 }
             }
             if (!$headTex && $shape && preg_match('/\bNoFace\b/', (string)($P['Tags'] ?? ''))) {
-                // a head that carries its own face (tag NoFace) never gets the standard face drawn on it: plain head colour instead
                 $c = $look['colors']['head'];
                 $flat = new Img(4, 4);
                 $flat->fillRect(0, 0, 4, 4, [(int)round($c[0] * 255), (int)round($c[1] * 255), (int)round($c[2] * 255)]);
@@ -208,12 +192,6 @@ trait ItemRender {
         return [$base, $tex, $headTex];
     }
 
-    /**
-     * The checkered template laid onto any mesh without stretching it. Each triangle is flattened along the axis it
-     * faces most, and the checker is a small tile that repeats in studs (one square is an eighth of a stud, the same as on
-     * the template), so a square is never longer than about 1.4 times its width, whatever the shape.
-     * $tpl only lends its two colours. Returns [mesh with uv, the tile as an Img].
-     */
     private static function checkerMesh(array $m, Img $tpl): array {
         $c1 = $tpl->px[12 * $tpl->w + 235];
         $c2 = $tpl->px[12 * $tpl->w + 243];
@@ -247,17 +225,10 @@ trait ItemRender {
         return [['pos' => $m['pos'], 'nrm' => $m['nrm'], 'uv' => $uv], new Img(16, 16, $px)];
     }
 
-    /**
-     * Draw a face decal into a head texture the way Roblox draws a decal on a mesh: it does not project the decal onto the front
-     * of the shape, it draws the mesh a second time with the decal as its texture, through the mesh's own UVs (GeometryGenerator
-     * addFileMesh in the 2016 source). So the decal image covers the mesh's whole 0 to 1 UV square, and the head texture, which
-     * is laid out in the same UV space, just takes the decal over it. Where the decal is see-through the head shows as it was.
-     */
     private static function bakeFace(Img $tex, Img $face): void {
         $tex->drawScaled($face, 0, 0, $tex->w, $tex->h);
     }
 
-    // the NeckRigAttachment a head asset carries (a Vector3Value or an Attachment, below the mesh or below its part), or null
     private static function neckRig(Inst $mesh): ?array {
         foreach ($mesh->children as $c) {
             if ($c->name !== 'NeckRigAttachment') {
@@ -278,17 +249,14 @@ trait ItemRender {
             return null;
         }
         try {
-            // v1 meshes are stored V-flipped, newer ones are not (same rule as the 2016 loader), so a texture lines up
             return self::cleanMesh(self::parseMesh2016($b));
         } catch (\Throwable $e) {
             return null;
         }
     }
 
-    // a part texture: the body colour with the base texture and then the overlay on top
     private $pkgAtlas = false;
 
-    // the shirt and pants template of package pictures (grey and blue checks), keyed to see-through where it is plain grey
     private function packageTemplateImage(): ?Img {
         $f = __DIR__ . '/../../data/package-template.png';
         $tpl = is_file($f) ? Img::decode((string)file_get_contents($f)) : null;
@@ -303,7 +271,6 @@ trait ItemRender {
         return $tpl;
     }
 
-    // that template laid out like the body-part textures (a 1024x512 atlas, the same as the 2016 renderer builds)
     private function packageTemplateAtlas(): ?Img {
         if ($this->pkgAtlas === false) {
             $tpl = $this->packageTemplateImage();
@@ -328,8 +295,6 @@ trait ItemRender {
         if (array_key_exists($key, $this->partImgCache)) {
             return $this->partImgCache[$key];
         }
-        // a body part fills a small piece of the picture, so its texture is read at 512 pixels at most: a 1024 texture would
-        // be four times the work for no visible difference
         $get = function ($v) {
             if (!$v) {
                 return null;
@@ -346,7 +311,6 @@ trait ItemRender {
         if (!$base && !$over) {
             return $this->partImgCache[$key] = null;
         }
-        // a part may carry only an overlay (or only a base): whichever it has is drawn on the body colour
         $first = $base ?: $over;
         $img = new Img($first->w, $first->h);
         $img->fillRect(0, 0, $img->w, $img->h, [(int)round($color[0] * 255), (int)round($color[1] * 255), (int)round($color[2] * 255)]);
@@ -354,8 +318,6 @@ trait ItemRender {
             $img->drawOver($base);
         }
         if ($template) {
-            // a package drawn on its own: the checkered shirt and pants template lies where clothes would go, over the part's
-            // base texture and under its overlay (as Roblox's catalog picture does)
             $atlas = $this->packageTemplateAtlas();
             if ($atlas) {
                 $w = $img->w;

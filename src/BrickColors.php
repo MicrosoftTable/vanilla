@@ -1,7 +1,6 @@
 <?php
 namespace Vanilla;
 
-// the roblox brickcolor palette: brickcolor number => [r, g, b]
 final class BrickColors {
     const TABLE = [
         1 => [242, 243, 243], 2 => [161, 165, 162], 3 => [249, 233, 153], 5 => [215, 197, 154], 6 => [194, 218, 184],
@@ -35,14 +34,12 @@ final class BrickColors {
         1029 => [255, 255, 204], 1030 => [255, 204, 153], 1031 => [98, 37, 209], 1032 => [255, 0, 191],
     ];
 
-    // the number that is used when a model names a brickcolor that is not in the table
     const FALLBACK = 194;
 
     static function has($n): bool {
         return isset(self::TABLE[$n]);
     }
 
-    // [r, g, b] as 0 to 255 values
     static function rgb($n): array {
         return self::TABLE[$n] ?? self::TABLE[self::FALLBACK];
     }

@@ -5,7 +5,7 @@ trait Character2016 {
     private static $characterMeshes2016 = [];
     private $defaultFace2016 = null;
 
-    // V1 meshes are V-flipped by the original loader; V2 meshes are not.
+    // v1 meshes are v-flipped, v2 are not
     private static function parseMesh2016(string $bytes): array {
         $mesh = self::parseMesh($bytes);
         if (substr($bytes, 0, 10) !== 'version 1.') {
@@ -48,13 +48,10 @@ trait Character2016 {
                     } catch (\Throwable $e) { $look['notes'][] = '2016: ' . $key . ' package mesh could not be loaded'; }
                 }
             }
-            // MaterialGenerator's 1024x512 composite reserves its right quarter for extras.
             foreach ($mesh['uv'] as &$uv) { $uv[0] *= 0.75; }
             unset($uv);
             $base[$key] = $mesh;
         }
-        // character3.rbxm: size 2,1,1 and SpecialMesh Scale 1.25,1.25,1.25.
-        // GeometryGenerator::getMeshScale divides those values by 1.25: net scale 1.
         $base['headRaw'] = $this->characterMesh2016('head');
         $base['head'] = $this->headGeometry2016($look);
         $base['headBox'] = self::meshBounds($base['head']);
@@ -88,7 +85,6 @@ trait Character2016 {
             foreach ($variants as $suffix => $v) {
                 if (max(abs($b - $v[0]), abs($r - $v[1]), abs($u - $v[2])) < 1e-5) { $name .= $suffix; break; }
             }
-            // Baked legacy variants already include their bevel/bulge/custom scale.
             $scale = [1, 1, 1];
         } elseif ($type === 3 || $type === 'Sphere') {
             $name = 'headL';
@@ -115,7 +111,7 @@ trait Character2016 {
         }
     }
 
-    private $tex2016Cache = [];   // the last textures put together, reused when the next picture (the headshot) shows the same
+    private $tex2016Cache = [];
 
     private function characterTextures2016(array $look, Img $face, ?array $headMesh = null): array {
         $sig = function ($im) { return $im ? md5($im->w . 'x' . $im->h . ':' . implode(',', $im->px)) : '-'; };
@@ -145,7 +141,6 @@ trait Character2016 {
             $props = isset($look['bodyMeshes'][$key]) ? $look['bodyMeshes'][$key]->props : [];
             $baseId = self::meshContent2016($props['BaseTextureId'] ?? null);
             $overlayId = self::meshContent2016($props['OverlayTextureId'] ?? null);
-            // a package drawn on its own: its parts carry the checkered shirt and pants template (between base and overlay)
             $tplLayer = !empty($look['pkgview']) && isset($look['bodyMeshes'][$key]) ? $this->packageTemplateImage() : null;
             $cacheKey = ($baseId ?? '') . '|' . ($overlayId ?? '') . ($tplLayer ? '|t' : '');
             if (!isset($atlases[$cacheKey])) {
@@ -165,7 +160,6 @@ trait Character2016 {
             }
             $bodyTextures[$key] = $atlases[$cacheKey];
         }
-        // The head's native UVs already include the front decal and a blank border for caps/back.
         $head = new Img($face->w, $face->h);
         $rgb = array_map(function ($c) { return (int)round($c * 255); }, $look['colors']['head']);
         $head->fillRect(0, 0, $head->w, $head->h, $rgb);
@@ -175,12 +169,11 @@ trait Character2016 {
         if ($look['headMesh']) {
             $textureId = self::meshContent2016($look['headMesh']->props['TextureId'] ?? null);
             if ($textureId && ($image = $this->image($textureId))) {
-                // the head's own texture sits on the head colour, and its face goes on the front of the shape (as in 2012)
                 $flat = new Img($image->w, $image->h);
                 $flat->fillRect(0, 0, $flat->w, $flat->h, $rgb);
                 $flat->drawOver($image);
                 if ($headMesh && !preg_match('/\bNoFace\b/', (string)($look['headMesh']->props['Tags'] ?? ''))) {
-                    self::bakeFace($flat, $face);   // through the mesh's own UVs, as Roblox draws a decal on a mesh
+                    self::bakeFace($flat, $face);
                 }
                 $headTexture = new Texture($flat);
                 $headTexture->repeat = false;
@@ -189,7 +182,6 @@ trait Character2016 {
         return [$bodyTextures, $headTexture];
     }
 
-    // Rasterize the original 2D compositing meshes, rather than guessing face rectangles.
     private function compositeLayer2016(Img $out, string $name, ?Img $image, array $color): void {
         $mesh = $this->characterMesh2016($name);
         $texture = $image ? new Texture($image) : null;
@@ -236,7 +228,6 @@ trait Character2016 {
         }
     }
 
-    // Default engine thumbnail camera. Calling Lua may supply a different ThumbnailCamera.
     private static function thumbnailCamera2016(array $bounds, int $W, int $H, bool $crop = false, ?array $physicalBounds = null): array {
         $modelBounds = $physicalBounds ?? $bounds;
         $lo = $modelBounds['lo']; $hi = $modelBounds['hi'];
@@ -255,13 +246,10 @@ trait Character2016 {
         foreach ([-1, 1] as $x) { foreach ([-1, 1] as $y) { foreach ([-1, 1] as $z) {
             $corners[] = [$x < 0 ? $lo[0] : $hi[0], $y < 0 ? $lo[1] : $hi[1], $z < 0 ? $lo[2] : $hi[2]];
         } } }
-        // RCCService.Test/LuaScripts.cs AvatarThumbScript omits Click's optional crop flag.
         if (!$crop) {
             $eye = [$center[0] + $direction[0] * $distance, $center[1] + $direction[1] * $distance, $center[2] + $direction[2] * $distance];
             return ['vp' => self::mul4($projection, self::lookAt($eye, $center, [0, 1, 0])), 'eye' => $eye, 'center' => $center, 'distance' => $distance, 'bounds' => $bounds];
         }
-        // Camera::tryZoomExtents starts one largestSide away. modifyThumbnailCamera
-        // dollies backward by 1+depth^2 if any scene AABB corner clips, for at most 10 tries.
         for ($depth = 1; $depth <= 11; $depth++) {
             $eye = [$center[0] + $direction[0] * $distance, $center[1] + $direction[1] * $distance, $center[2] + $direction[2] * $distance];
             $vp = self::mul4($projection, self::lookAt($eye, $center, [0, 1, 0]));
@@ -290,7 +278,6 @@ trait Character2016 {
     private static function sceneBounds2016(array $base, array $cfs, array $items, bool $physical = false, string $only = ''): array {
         $lo = [INF, INF, INF]; $hi = [-INF, -INF, -INF];
         $add = function (array $geometry, array $frame) use (&$lo, &$hi) {
-            // The engine transforms each drawable's LOCAL mesh AABB, then unions it.
             $box = self::meshBounds($geometry);
             foreach ([-1, 1] as $x) { foreach ([-1, 1] as $y) { foreach ([-1, 1] as $z) {
                 $p = self::cfApply($frame, [$x < 0 ? $box['lo'][0] : $box['hi'][0], $y < 0 ? $box['lo'][1] : $box['hi'][1], $z < 0 ? $box['lo'][2] : $box['hi'][2]]);

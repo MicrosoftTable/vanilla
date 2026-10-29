@@ -3,7 +3,6 @@ namespace Vanilla;
 
 require_once __DIR__ . '/BrickColors.php';
 
-// reads xml and binary roblox models into one tree
 final class Rbxm {
     const MAX_BYTES = 16777216, MAX_DEPTH = 200, MAX_ELEMENTS = 500000, MAX_INSTANCES = 100000;
 
@@ -46,7 +45,7 @@ final class Rbxm {
 
     private static function xmlTree(string $src): array {
         $re = '/<!\[CDATA\[([\s\S]*?)\]\]>|<!--[\s\S]*?-->|<\?[\s\S]*?\?>|<!DOCTYPE[^>]*>|<(\/?)([A-Za-z_][\w.:-]*)((?:\s+[\w.:-]+\s*=\s*(?:"[^"]*"|\'[^\']*\'))*)\s*(\/?)>|([^<]+)/';
-        // no dtds or entity declarations: nothing in a model needs them
+        // no dtds or entity declarations
         if (stripos($src, '<!DOCTYPE') !== false || stripos($src, '<!ENTITY') !== false) {
             throw new \RuntimeException('xml with a doctype is not accepted');
         }
@@ -423,7 +422,7 @@ final class Rbxm {
                 }
                 return $out;
             case 27:
-                // Int64 (a CharacterMesh's MeshId, BaseTextureId and OverlayTextureId): 8 bytes interleaved, zigzag
+                // int64: 8 bytes interleaved, zigzag
                 for ($i = 0; $i < $n; $i++) {
                     $u = 0;
                     for ($b = 0; $b < 8; $b++) {
@@ -582,7 +581,6 @@ final class Rbxm {
             if (!$c) {
                 continue;
             }
-            // a part can only have one parent and can never end up inside itself
             if (isset($placed[spl_object_id($c)])) {
                 continue;
             }

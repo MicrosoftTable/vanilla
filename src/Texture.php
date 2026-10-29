@@ -1,7 +1,7 @@
 <?php
 namespace Vanilla;
 
-// textures behave like webgl1 ones so power of two sizes get mipmaps
+// textures behave like webgl1: power of two sizes get mipmaps
 final class Texture {
     public $levels = [];
     public $repeat;

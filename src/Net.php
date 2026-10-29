@@ -1,12 +1,10 @@
 <?php
 namespace Vanilla;
 
-// every outside request goes through here so it can only reach public addresses on the hosts it is allowed to
+// every outside request goes through here, public addresses on allowed hosts only
 final class Net {
-    // why the last get returned null
     static $error = '';
 
-    // opts: maxBytes hosts (list of allowed hostnames or null for any public host) redirects allowPrivate timeout
     static function get(string $url, array $opts): ?string {
         self::$error = '';
         $hops = max(0, (int)($opts['redirects'] ?? 0));
@@ -38,7 +36,6 @@ final class Net {
         return null;
     }
 
-    // a checked url: [url, host, port, ip] or null when it is not allowed
     static function target(string $url, array $opts): ?array {
         if (strlen($url) > 2048 || preg_match('/[\x00-\x20\x7f]/', $url)) {
             return null;
@@ -65,7 +62,6 @@ final class Net {
         return $ip === null ? null : [$url, $host, $port, $ip];
     }
 
-    // the address a host points at, only if every address it has is public
     static function resolve(string $host, bool $allowPrivate): ?string {
         if (filter_var($host, FILTER_VALIDATE_IP)) {
             $ips = [$host];
@@ -97,7 +93,6 @@ final class Net {
         if (!filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE)) {
             return false;
         }
-        // ranges the filter above lets through
         foreach (['100.64.0.0/10', '192.0.0.0/24', '198.18.0.0/15', 'fc00::/7', 'fe80::/10', '::ffff:0:0/96', '64:ff9b::/96'] as $net) {
             if (self::inRange($ip, $net)) {
                 return false;
@@ -126,7 +121,7 @@ final class Net {
         return (ord($a[$bytes]) & $mask) === (ord($b[$bytes]) & $mask);
     }
 
-    // curl options for a checked target: the address is pinned so dns cannot change between the check and the connect
+    // the address is pinned so dns cannot change between the check and the connect
     static function options(array $t, string &$buf, array $opts): array {
         [$url, $host, $port, $ip] = $t;
         $max = (int)($opts['maxBytes'] ?? 65536);

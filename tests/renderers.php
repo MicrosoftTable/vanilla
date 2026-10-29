@@ -1,5 +1,5 @@
 <?php
-// Run: php tests/renderers.php. All inputs are local; no asset server is needed.
+// run: php tests/renderers.php
 require dirname(__DIR__) . '/src/Vanilla.php';
 use Vanilla\Avatar;
 use Vanilla\Inst;
@@ -100,7 +100,6 @@ $att->name = 'HatAttachment';
 array_unshift($handle->children, $first);
 check(invoke($a, 'accessoryFrame', $hat, $handle, $cfs) == Avatar::CF([0, 5, 0]), 'Only first handle attachment is used');
 
-// Exact raster and fast raster both exercise the shared profile and FX shader.
 $xml = hatFixture('Fire');
 $exact = new Avatar(['exact' => true, 'fetcher' => function ($id) use ($xml) { return $xml; }]);
 foreach (['2012', '2016'] as $mode) {

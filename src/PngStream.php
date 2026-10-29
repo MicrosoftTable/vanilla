@@ -1,7 +1,6 @@
 <?php
 namespace Vanilla;
 
-// png written a row at a time so big pictures never sit in memory
 final class PngStream {
     private $w;
     private $h;

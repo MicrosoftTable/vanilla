@@ -1,27 +1,23 @@
 <?php
 namespace Vanilla;
 
-// fetching assets by id and decoding them (only ever from the configured host)
+// fetching assets by id, only from the configured host
 trait Assets {
-    // an asset is a number, or a number and a version written 123@4 (a version is a number, live or latest)
     static function parseId($s): ?string {
         $s = trim((string)$s);
         return preg_match('/^[1-9]\d{0,17}(@([1-9]\d{0,5}|live|latest))?$/D', $s) ? $s : null;
     }
 
-    // "123@4" -> ["123", "4"]; "123" -> ["123", null]
     static function splitKey(string $key): array {
         $p = explode('@', $key, 2);
         return [$p[0], $p[1] ?? null];
     }
 
-    // the address of an asset on the asset host, with its version when it has one
     private function assetUrl(string $key): string {
         [$n, $v] = self::splitKey($key);
         return $this->assetBase . $n . ($v === null ? '' : '&version=' . $v);
     }
 
-    // a version that can change ("live", "latest") is only kept a minute; everything else a day
     private static function keepFor(string $key): int {
         return preg_match('/@(live|latest)$/D', $key) ? 60 : 86400;
     }
@@ -40,11 +36,9 @@ trait Assets {
             if (!preg_match('/^[1-9]/', $m[1])) {
                 return null;
             }
-            // ...&version=N pins a version
             if (preg_match('/[?&]version=([1-9]\d{0,5}|live|latest)(?![\w])/i', $ref, $v)) {
                 return $m[1] . '@' . strtolower($v[1]);
             }
-            // 123@4 as written by a caller
             if (preg_match('/^(\d{1,18})@([1-9]\d{0,5}|live|latest)$/iD', trim($ref), $w) && preg_match('/^[1-9]/', $w[1])) {
                 return $w[1] . '@' . strtolower($w[2]);
             }
@@ -87,7 +81,6 @@ trait Assets {
         return $this->cache[$id] = $b;
     }
 
-    // assets are only ever fetched by number from the one configured host and only from public addresses
     private function netOpts(): array {
         $port = parse_url($this->assetBase, PHP_URL_PORT);
         return [
@@ -149,7 +142,6 @@ trait Assets {
         return array_values($out);
     }
 
-    // fetches the assets and then the meshes and images they point at, a few rounds deep
     function loadWaves(array $ids): void {
         $wave = $ids;
         for ($round = 0; $round < 3 && $wave; $round++) {
@@ -245,7 +237,6 @@ trait Assets {
         return is_string($ref) && stripos($ref, 'rbxasset://') === 0;
     }
 
-    // rbxasset:// is rewritten to the asset url: a number is an asset id and a path is added after the asset base
     private function contentBytes(string $ref): ?string {
         if (array_key_exists($ref, $this->content)) {
             return $this->content[$ref];

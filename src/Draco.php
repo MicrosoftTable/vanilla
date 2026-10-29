@@ -1,14 +1,12 @@
 <?php
 namespace Vanilla;
 
-// reads the draco geometry inside roblox mesh version 6 and 7 files
-// only what roblox writes is handled: sequential connectivity with raw indices, generic, integer and quantized attributes
+// draco reader for roblox mesh v6 and v7: only what roblox writes (sequential connectivity, raw indices)
 final class Draco {
     private string $b;
     private int $p;
     private int $end;
 
-    /** @return array{faces: array, attrs: array} attrs are [type, components, values] with one entry per point */
     static function decode(string $bytes, int $off, int $len): array {
         $d = new self();
         $d->b = $bytes;
@@ -89,7 +87,6 @@ final class Draco {
         if ($flags & 0x8000) {
             throw new \RuntimeException('draco: metadata is not supported');
         }
-        // connectivity
         $nf = $this->varint();
         $np = $this->varint();
         if ($nf > 2000000 || $np > 2000000) {
@@ -114,7 +111,6 @@ final class Draco {
             }
             $faces[] = $f;
         }
-        // attributes
         $nd = $this->u8();
         if ($nd !== 1) {
             throw new \RuntimeException('draco: unexpected attribute decoders');
@@ -131,12 +127,10 @@ final class Draco {
             $a['dec'] = $this->u8();
         }
         unset($a);
-        // portable values, one attribute after another
         foreach ($A as &$a) {
             $a['q'] = $this->portable($a, $np);
         }
         unset($a);
-        // what the quantized ones need to become floats again
         foreach ($A as &$a) {
             if ($a['dec'] === 2) {
                 $min = [];
@@ -177,7 +171,6 @@ final class Draco {
         return [1 => 1, 2 => 1, 3 => 2, 4 => 2, 5 => 4, 6 => 4, 7 => 8, 8 => 8, 9 => 4, 10 => 8, 11 => 1][$dt] ?? 0;
     }
 
-    /** a flat list of the numbers of one attribute (floats for generic ones, integers for the others) */
     private function portable(array $a, int $np): array {
         $nc = $a['nc'];
         $n = $np * $nc;
@@ -241,7 +234,6 @@ final class Draco {
         return $v;
     }
 
-    /** the entropy coded integers of an attribute, as raw symbols */
     private function integers(int $n, int $nc): array {
         $compressed = $this->u8();
         if (!$compressed) {
@@ -294,7 +286,6 @@ final class Draco {
         throw new \RuntimeException('draco: unknown symbol coding');
     }
 
-    /** reads a probability table and the rans data behind it, and gives back a function that returns the next symbol */
     private function rans(int $bits): \Closure {
         $ns = $this->varint();
         if ($ns < 1 || $ns > 1 << 20) {

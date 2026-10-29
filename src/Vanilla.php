@@ -9,12 +9,11 @@ foreach (['RenderProfiles', 'Character2016', 'Particles2016', 'Geometry', 'Asset
     require_once __DIR__ . '/parts/' . $part . '.php';
 }
 
-// vanilla is a software renderer in plain php with no gpu and no webgl and no rcc
+// vanilla is a software renderer in plain php: no gpu, no webgl, no rcc
 final class Avatar {
     use RenderProfiles, Character2016, Particles2016, Geometry, Assets, Meshes, LookBuilder, Particles, ItemRender, Scene, FastRaster, ReferenceRaster;
 
     const TPL_W = 585, TPL_H = 559;
-    // where each face of each body part sits on the 585x559 clothing template: x, y, width, height
     const TEMPLATE = [
         'torso' => [
             'U' => [231, 8, 128, 64],
@@ -41,7 +40,6 @@ final class Avatar {
             'L' => [374, 355, 64, 128],
         ],
     ];
-    // camera and lighting values fitted to real 2012 thumbnails
     const CAM_DIR = [-0.40142, 0.39402, -0.82681];
     const CAM_FOV = 70.86, HEAD_SCALE = 1.0, CAM_ZOOM = 1.0;
     const FACE_BOX = [0.0343, -0.0233, 1.0806, 1.0544];
@@ -58,7 +56,6 @@ final class Avatar {
         '150x150' => [150, 150],
         '48x48' => [48, 48]
     ];
-    // headshot camera fitted to a real 2012 150x150 headshot
     const HEAD_DIR = [0.0, 0.0, -1.0], HEAD_FOV = 42.84, HEAD_DIST = 3.405, HEAD_AIM = 0.0, HEAD_MAXOUT = 1.6, HEAD_NEAR = 2.6, ITEM_THUMB_FOV = 20.0;
     const VIEWS = ['body', 'head'];
     const MAX_ASSET_BYTES = 8 * 1024 * 1024, MAX_IMAGE_SIDE = 2048, MAX_MESH_VERTS = 150000, MAX_IDS = 12, MAX_ACCESSORIES = 8;
@@ -75,8 +72,7 @@ final class Avatar {
     private $content = [];
     private static $base = null;
     private $exact = false;
-    private $userAgent = 'Vanilla/1.0';   // sent on every outgoing request (set 'userAgent' in config.php)
-    // optional camera override for one render (see README, "camera"): zoom 1 = the default framing, yaw and pitch in degrees from the default angle
+    private $userAgent = 'Vanilla/1.0';
     private $camZoom = 1.0, $camYaw = 0.0, $camPitch = 0.0;
 
     function __construct(array $opts = []) {
@@ -123,7 +119,6 @@ final class Avatar {
         ];
     }
 
-    /** Reads zoom, yaw and pitch from a request. Missing means the default camera. Throws for a value that is not a number or is out of range. */
     private function selectCamera(array $req): void {
         $get = function (string $k, float $def, float $lo, float $hi) use ($req): float {
             if (!isset($req[$k]) || $req[$k] === '') {

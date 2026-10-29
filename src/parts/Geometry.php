@@ -1,7 +1,6 @@
 <?php
 namespace Vanilla;
 
-// vectors and matrices plus the camera maths
 trait Geometry {
     static function norm(array $v): array {
         $l = sqrt($v[0] * $v[0] + $v[1] * $v[1] + $v[2] * $v[2]) ?: 1;

@@ -1,7 +1,6 @@
 <?php
 namespace Vanilla;
 
-// turning shirts pants faces hats and gear into something drawable
 trait LookBuilder {
     static function brick($n): array {
         $c = BrickColors::rgb($n);
@@ -179,7 +178,7 @@ trait LookBuilder {
                 $flip->px[$y * $inlet->w + $x] = $inlet->px[$y * $inlet->w + ($inlet->w - 1 - $x)];
             }
         }
-        foreach (['right', 'left'] as $side) {
+        foreach ($look['shirt'] ? [] : ['right', 'left'] as $side) {
             $d = $T[$side]['D'];
             $iw = (int)round($d[2] * $k);
             $ih = (int)round($d[3] * $k);
@@ -233,7 +232,6 @@ trait LookBuilder {
             'fx' => array_values(array_filter($h->children, function ($c) {
             return in_array($c->cls, ['Fire', 'Smoke', 'Sparkles'], true);
         }))];
-        // a see-through hat: the Handle's Transparency (0 solid ... 1 invisible) becomes the item's opacity
         $tr = $h->props['Transparency'] ?? 0;
         $item['alpha'] = is_numeric($tr) ? max(0.0, min(1.0, 1.0 - (float)$tr)) : 1.0;
         $P = $sm ? $sm->props : [];
@@ -278,7 +276,7 @@ trait LookBuilder {
                 } else {
                     $b = $this->bytes($meshUrl);
                     if ($b === null) { throw new \RuntimeException('a mesh could not be fetched'); }
-                    $m = self::cleanMesh(self::parseMesh2016($b));   // newer (v2, v3) meshes carry their V the other way up
+                    $m = self::cleanMesh(self::parseMesh2016($b));
                 }
             } elseif ((is_numeric($type) && (int)$type === 0)
                 || (is_string($type) && strcasecmp($type, 'Head') === 0)) {
@@ -361,7 +359,6 @@ trait LookBuilder {
             }
             foreach ($list as $x) {
                 $P = $x->props;
-                // bundles carry an r6 and an r15 version and only r6 is drawn
                 if (preg_match('/^r15/i', (string)$x->name) && !in_array($x->cls, ['Hat', 'Accessory', 'Accoutrement', 'Tool'], true)) {
                     continue;
                 }
@@ -426,7 +423,6 @@ trait LookBuilder {
             $look['notes'][] = "$id: this is a bare image, not a shirt, pants, face, hat or gear asset, so it was refused";
             return;
         }
-        // a package can carry body colours (a BodyColors asset in its list, like a charapp's bodycolors entry)
         if (strpos($b, 'BodyColors') !== false && ($bc = CharApp::bodyColors($b)) !== null) {
             $look['pkgColors'] = $bc;
             return;

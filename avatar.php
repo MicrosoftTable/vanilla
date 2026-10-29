@@ -27,7 +27,6 @@ foreach ($q as $k => $v) {
         fail(400, 'Bad parameter: ' . substr((string)$k, 0, 20));
     }
 }
-// every input is a plain string checked against a strict pattern
 $item = null;
 if (isset($q['item']) && $q['item'] !== '') {
     if (!preg_match('/^[1-9]\d{0,17}$/D', $q['item'])) {
@@ -141,7 +140,6 @@ $cacheDir = $config['cacheDir'];
 if (!is_dir($cacheDir)) {
     @mkdir($cacheDir, 0700, true);
 }
-// a finished render for exactly this request is reused
 $key = hash(
     'sha256',
     RENDER_VERSION . '|' . ($item !== null ? 'item' . $item : implode(',', $ids) . '|' . implode(
@@ -153,7 +151,6 @@ $file = "$cacheDir/render-$key.$format";
 $etag = '"' . substr($key, 0, 32) . '"';
 $maxAge = (int)$config['cacheSeconds'];
 
-// a new render for a sid deletes that sid previous render from the server
 function keepOnly(string $dir, string $sid, string $file, int $maxAge, int $maxBytes): void {
     if ($sid !== '') {
         $ptr = "$dir/sid-$sid";
@@ -170,7 +167,7 @@ function keepOnly(string $dir, string $sid, string $file, int $maxAge, int $maxB
     $keep = [];
     $total = 0;
     $sids = [];
-    // only our own file names are ever touched and links are skipped
+    // only our own file names are touched, links are skipped
     foreach (@scandir($dir) ?: [] as $b) {
         if (!preg_match('/^(render-[0-9a-f]{64}\.(png|webp|jpg)|sid-[0-9a-f]{16,32}|asset-\d{1,18}|img-\d{1,18}h?\.z|charapp-[0-9a-f]{64}|content-[0-9a-f]{64}|.+\.\d+\.tmp)$/D', $b)) {
             continue;
@@ -247,7 +244,6 @@ if (is_file($file) && filemtime($file) > time() - $maxAge) {
     send((string)file_get_contents($file), $etag, $maxAge);
 }
 
-// only a few renders run at a time
 @set_time_limit(90);
 @ini_set('memory_limit', '256M');
 $slot = null;

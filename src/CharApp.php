@@ -4,7 +4,7 @@ namespace Vanilla;
 require_once __DIR__ . '/Rbxm.php';
 require_once __DIR__ . '/Net.php';
 
-// reads a roblox charapp string like https://host/;https://host/asset/?id=1;https://host/asset/?id=2;
+// reads a roblox charapp string
 final class CharApp {
     const MAX_CHARS = 4096, MAX_FETCH_BYTES = 65536, MAX_ENTRIES = 64;
     const PARTS = [
@@ -16,8 +16,6 @@ final class CharApp {
         'RightLegColor' => 5
     ];
 
-    // opts: assetBase allowedHosts cacheDir and get (a function from url to body or null, used by tests)
-    // returns ids (asset ids in order) and colors (six body colors or null when the charapp has no bodycolors)
     static function resolve(string $charapp, array $opts): array {
         $charapp = trim($charapp);
         if ($charapp === '' || strlen($charapp) > self::MAX_CHARS) {
@@ -25,7 +23,6 @@ final class CharApp {
         }
         $hosts = self::hosts($opts);
         $entries = self::split($charapp);
-        // a single url that is not an asset or bodycolors is an endpoint that returns the list (like CharacterFetch.ashx)
         if (
             count($entries) === 1 && self::kind($entries[0]) === 'other' && preg_match('#^https?://#i', $entries[0]) && !preg_match(
                 '#^https?://[^/]+/?$#i',
@@ -63,7 +60,6 @@ final class CharApp {
                 }
                 continue;
             }
-            // only the first bodycolors url is fetched
             if ($fetchedColors) {
                 continue;
             }
@@ -161,7 +157,6 @@ final class CharApp {
         return $buf;
     }
 
-    // the bodycolors xml from roblox: ints or brickcolors named HeadColor and so on and color3 versions named HeadColor3
     static function bodyColors(string $xml): ?array {
         try {
             $roots = Rbxm::parse($xml)["roots"];

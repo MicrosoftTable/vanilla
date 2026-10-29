@@ -1,7 +1,6 @@
 <?php
 namespace Vanilla;
 
-// fire smoke and sparkles simulated from a fixed seed
 trait Particles {
     private static $FX_TIME = 6;
     private static $FX_DT = 1 / 30;
@@ -54,7 +53,7 @@ trait Particles {
         return null;
     }
 
-    // xorshift32 so the random numbers are identical on every server
+    // xorshift32, so the numbers are the same on every server
     private static function fxRand(int &$s): float {
         $s ^= ($s << 13) & 0xFFFFFFFF;
         $s ^= $s >> 17;
@@ -62,7 +61,6 @@ trait Particles {
         return $s / 4294967296;
     }
 
-    // particles run for a fixed time from a fixed seed so a hat always gives the same picture
     private static function fxSimulate(array $sys, int &$seed): array {
         $ps = [];
         $rem = 0.0;

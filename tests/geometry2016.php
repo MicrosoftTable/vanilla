@@ -32,7 +32,6 @@ verifyGeometry(count($native['head']['pos']) === 2538, 'Original head triangle c
 verifyGeometry(count($native['torso']['pos']) === 132, 'Original torso triangle count');
 verifyGeometry($native['torso']['pos'] === $base['torso']['pos'], 'Default torso geometry already matches original source');
 verifyGeometry($native['head']['uv'] !== $base['head']['uv'], 'Binary head UVs follow 2016 loader');
-// Build a minimal original-format binary mesh with known UVs.
 $binary = "version 2.00\n" . pack('vCCVV', 12, 36, 12, 3, 1);
 foreach ([[0, 0, 0], [1, 0, 0], [0, 1, 0]] as $v) {
     $binary .= pack('g*', $v[0], $v[1], $v[2], 0, 0, 1, 0.25, 0.75) . pack('V', 0);
@@ -54,7 +53,6 @@ $renderBounds = geometryCall($a, 'sceneBounds2016', [$native, $frames, []]);
 verifyGeometry($renderBounds['hi'][1] > $bounds['hi'][1], 'Rendered mesh bounds are distinct from physical camera bounds');
 $cropped = geometryCall($a, 'thumbnailCamera2016', [$renderBounds, 512, 512, true, $bounds]);
 verifyGeometry($camera['vp'] !== $cropped['vp'], 'Optional source crop is distinct from default AvatarThumbScript');
-// Native atlas colors and clothing orientation; no studs/inlet texture is involved.
 $look['colors'] = array_fill_keys(array_keys($look['colors']), [0.5, 0.5, 0.5]);
 $face = new Img(16, 16);
 [$textures] = geometryCall($a, 'characterTextures2016', [$look, $face]);
@@ -83,7 +81,6 @@ foreach (['torso', 'leftArm', 'rightArm', 'leftLeg', 'rightLeg'] as $key) {
     $c = $textures[$key]->sample($uv[0] / $n, $uv[1] / $n);
     verifyGeometry($c[0] > 0.8 && $c[1] < 0.1 && $c[2] < 0.2, "$key front samples the shirt/pants front through native UVs");
 }
-// Actual CharacterMesh XML loads a replacement body mesh from a numeric MeshId.
 $xml = '<roblox version="4"><Item class="CharacterMesh"><Properties><token name="BodyPart">1</token><int name="MeshId">2</int></Properties></Item></roblox>';
 $replacement = file_get_contents($directory . '/leftarm.mesh');
 $b = new Avatar(['renderer' => '2016', 'fetcher' => function ($id) use ($xml, $replacement) { return $id === '1' ? $xml : ($id === '2' ? $replacement : null); }]);

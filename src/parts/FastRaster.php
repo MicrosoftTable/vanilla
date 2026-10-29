@@ -1,7 +1,7 @@
 <?php
 namespace Vanilla;
 
-// the fast rasteriser: shades once per pixel and supersamples only edges
+// the fast rasteriser: shades once per pixel, supersamples only edges
 trait FastRaster {
     private static $LOD_K = 0.5;
 
@@ -11,7 +11,6 @@ trait FastRaster {
         return $e | ($o << 8);
     }
 
-    // shades each pixel once and only supersamples edge pixels
     private function rasteriseFast(array $tris, int $W, int $H, int $SS, Texture $stud, array $faceBox): string {
         $S2 = $SS * $SS;
         $N = $W * $H;
@@ -146,9 +145,8 @@ trait FastRaster {
             $B8 = $bb >= 1 ? 255 : ($bb <= 0 ? 0 : (int)($bb * 255 + 0.5));
             return (255 << 24) | ($R8 << 16) | ($G8 << 8) | $B8;
         };
-        // the opacity of a see-through triangle at a point: its texture's alpha times the Handle's opacity
         $alphaAt = function (array $T, float $x, float $y): float {
-            // the 2012 renderer drew see-through things about twice as faint, so its opacity is squared
+            // the 2012 renderer drew see-through things about twice as faint, so opacity is squared
             return $T['sq'] ? $T['alpha'] * $T['alpha'] : $T['alpha'];
         };
         $alphaOK = function (array $T, float $x, float $y): bool {
@@ -186,7 +184,7 @@ trait FastRaster {
                 $T['P'][1][0], $T['P'][1][1], $T['P'][1][2],
                 max(0, intdiv($T['bx0'], $SS)), min($W - 1, intdiv($T['bx1'], $SS)), max(0, intdiv($T['by0'], $SS)), min($H - 1, intdiv($T['by1'], $SS))];
             $isBl[$ti] = !empty($T['blend']);
-            $isFx[$ti] = $T['mode'] === 4 || $isBl[$ti];   // deferred: drawn after everything solid
+            $isFx[$ti] = $T['mode'] === 4 || $isBl[$ti];
             if ($isFx[$ti]) {
                 $hasFx = true;
             }
@@ -194,7 +192,6 @@ trait FastRaster {
         }
         $R = $SS * 0.7072 + 1e-6;
 
-        // the picture is drawn in bands of rows to keep memory low
         $B = max(8, intdiv($hasFx ? 262144 : 1048576, $W * $S2));
         if ($B > $H) {
             $B = $H;
@@ -324,7 +321,6 @@ trait FastRaster {
             }
         };
 
-        // a see-through triangle blended into the samples it covers (they already hold what is solid behind it)
         $blendMesh = function (array $T, array $c, int $X, int $Y, array &$s, int $k0) use ($SS, $EPS, &$sz, $shade, $alphaAt) {
             [$a0, $b0, $c0, $a1, $b1, $c1, , , , , , , $zA, $zB, $zC] = $c;
             $bx = $X * $SS;

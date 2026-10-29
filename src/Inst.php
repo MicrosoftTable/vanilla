@@ -1,7 +1,6 @@
 <?php
 namespace Vanilla;
 
-
 final class Inst {
     public $cls;
     public $ref;

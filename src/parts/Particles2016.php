@@ -1,8 +1,7 @@
 <?php
 namespace Vanilla;
 
-// Fixed, unthrottled snapshot of ParticleEmitter.cpp/Emitter.cpp's legacy effects.
-// These are Fire/Smoke/Sparkles, not the separately scripted ParticleEmitter class.
+// fixed snapshot of the engine's legacy fire, smoke and sparkles
 trait Particles2016 {
     private $particleTextures2016 = [];
 
@@ -80,7 +79,6 @@ trait Particles2016 {
                     $strip = $this->particleTexture2016($recipe['strip']);
                     $alpha = $this->particleTexture2016($recipe['alpha']);
                     $sys['parts'] = self::fxSimulate2016($recipe, $frame, $seed, $strip, $alpha);
-                    // The engine sorts particles by view depth inside each emitter.
                     $view = self::norm(self::sub($frame['p'], $eye));
                     usort($sys['parts'], function ($a, $b) use ($view) {
                         return self::dot([$b['x'], $b['y'], $b['z']], $view) <=> self::dot([$a['x'], $a['y'], $a['z']], $view);
@@ -109,7 +107,6 @@ trait Particles2016 {
                 if ($p['ttl'] <= 0) { continue; }
                 foreach (['x', 'y', 'z'] as $k => $axis) {
                     $p[$axis] += $p['v'][$k] * $dt + 0.5 * $accel[$k] * $dt * $dt;
-                    // EnableParticleDrag defaults false in this source revision.
                     $p['v'][$k] = ($p['v'][$k] + $accel[$k] * $dt) * (1 - $r['drag'] * $dt);
                 }
                 $p['w'] += $r['grow'] * $dt;
@@ -145,7 +142,6 @@ trait Particles2016 {
         return $particles;
     }
 
-    // Returns premultiplied RGB and blend alpha, matching the four legacy shaders.
     private static function fxShade2016(array $T, array $t): array {
         $c = $T['color'];
         $v = $T['curve'];

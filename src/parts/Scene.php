@@ -1,9 +1,7 @@
 <?php
 namespace Vanilla;
 
-// camera lighting and the draw calls for one look
 trait Scene {
-    /** The Camera named inside a hat model, expressed relative to the Handle, or null. */
     private static function thumbCamOf(Inst $acc, Inst $h): ?array {
         if (!isset($h->props['CFrame'])) {
             return null;
@@ -24,7 +22,6 @@ trait Scene {
         return null;
     }
 
-    /** Swings a camera direction (a unit vector from the subject to the camera) by the caller's yaw and pitch. No override: unchanged. */
     private function turnCamera(array $d): array {
         if ($this->camYaw == 0.0 && $this->camPitch == 0.0) {
             return $d;
@@ -34,12 +31,10 @@ trait Scene {
         return [cos($el) * sin($az), sin($el), cos($el) * cos($az)];
     }
 
-    /** Is this hat or gear see-through: only when its Handle has Transparency, the way roblox does it. */
     private static function blendsItem(array $it): bool {
         return ($it['alpha'] ?? 1.0) < 0.999;
     }
 
-    /** Where a package's right hand is, in the arm's own space: a RightGripAttachment under its CharacterMesh, or null. */
     private static function packageGripOf(array $look): ?array {
         $cm = $look['bodyMeshes']['rightArm'] ?? null;
         if (!$cm) {
@@ -56,13 +51,12 @@ trait Scene {
         return null;
     }
 
-    /** The shoulder angle that points $grip (arm space) the same way a normal hand points when the arm is raised as $stdArm. */
     private static function raiseForGrip(array $stdArm, array $grip): float {
         $S = self::cfApply(self::cfMul(self::CF([0, 3, 0]), self::SHOULDER_R()), [0, 0, 0]);
         $dir = function (array $v) use ($S) {
             $d = [$v[0] - $S[0], $v[1] - $S[1], $v[2] - $S[2]];
             $l = sqrt($d[1] * $d[1] + $d[2] * $d[2]) ?: 1;
-            return [$d[1] / $l, $d[2] / $l];   // the arm turns about x, so only y and z matter
+            return [$d[1] / $l, $d[2] / $l];
         };
         $want = $dir(self::cfApply($stdArm, self::RIGHT_GRIP_C0()['p']));
         $best = M_PI / 2;
@@ -81,7 +75,7 @@ trait Scene {
 
     private function draw(array &$look, int $W, int $H, int $SS, string $view = 'body'): string {
         if ($view === 'head') {
-            $look['tool'] = null;   // a headshot never shows gear: it is held in the hand, not worn on the head
+            $look['tool'] = null;
         }
         $base = $this->base();
         $only = $look['only'];
@@ -93,8 +87,6 @@ trait Scene {
             [$base, $partTex, $headTex] = $this->characterBase2012($base, $look);
         }
         $cfs = self::partCFs((bool)$look['tool'], $this->renderer === '2016' ? 1.57 : M_PI / 2);
-        // a package right arm can say where its hand is (a RightGripAttachment under its CharacterMesh). The arm is then raised
-        // just far enough to put that hand straight out in front, and the gear goes in the hand, held the usual way up.
         $stdArm = $cfs['Right Arm'];
         $handGrip = $look['tool'] ? self::packageGripOf($look) : null;
         if ($handGrip) {
@@ -156,7 +148,6 @@ trait Scene {
         $partMap = ['torso' => ['Torso', 0], 'rightArm' => ['Right Arm', 1], 'leftArm' => ['Left Arm', 2], 'rightLeg' => ['Right Leg', 3], 'leftLeg' => ['Left Leg', 4]];
         $onlyPart = (strncmp($only, 'part:', 5) === 0 && isset($partMap[substr($only, 5)])) ? substr($only, 5) : null;
         if ($onlyPart !== null) {
-            // one body part on its own: zoomed in and looked at straight from the front
             [$cfName, $partIdx] = $partMap[$onlyPart];
             $pts = array_map(function ($q) use ($cfs, $cfName) { return self::cfApply($cfs[$cfName], $q); }, $base[$onlyPart]['pos']);
             $lo = [1e9, 1e9, 1e9]; $hi = [-1e9, -1e9, -1e9];
@@ -188,9 +179,7 @@ trait Scene {
             $fov = self::HEAD_FOV * M_PI / 180;
             $dist = self::HEAD_DIST;
             $cd = $this->turnCamera(self::norm(self::HEAD_DIR));
-            // A hat that reaches well out in front of the face (an astronaut helmet, a big cap brim) ends up very close to the lens,
-            // and perspective then blows it up and bends it. Back the camera off until the nearest hat point is a sane distance away
-            // and narrow the lens by the same ratio, so the head keeps its size but the hat is not warped.
+            // hats close to the lens are warped, so the camera backs off and the lens narrows to keep the head the same size
             $near = INF;
             foreach (array_slice($items, 0, $nHats) as $it) {
                 foreach ($it['geom']['pos'] as $p) {
@@ -248,20 +237,17 @@ trait Scene {
             }
             $center = [($lo[0] + $hi[0]) / 2, ($lo[1] + $hi[1]) / 2, ($lo[2] + $hi[2]) / 2];
             $radius = sqrt(($hi[0] - $lo[0]) ** 2 + ($hi[1] - $lo[1]) ** 2 + ($hi[2] - $lo[2]) ** 2) / 2;
-            // a hat or gear on its own is drawn through a narrow lens: the wide thumbnail lens stretches tall, close things (helmets)
             $fov = ($only === 'items' ? min(self::CAM_FOV, self::ITEM_THUMB_FOV) : self::CAM_FOV) * M_PI / 180;
             $dist = self::CAM_ZOOM * $radius / tan($fov / 2);
             $cd = $this->turnCamera(self::norm(self::CAM_DIR));
             $eye = [$center[0] + $cd[0] * $dist, $center[1] + $cd[1] * $dist, $center[2] + $cd[2] * $dist];
             $camUp = [0, 1, 0];
             if ($only === 'items' && count($items) === 1 && !empty($items[0]['thumbCam'])) { try {
-                // the hat's own ThumbnailCamera (what Roblox used for its catalog picture): same angle, same focus point
                 $tc = $items[0]['thumbCam'];
                 $fp = self::cfApply($items[0]['cf'], $tc['focus']);
                 $ep = self::cfApply($items[0]['cf'], $tc['eye']);
                 $dir = self::norm(self::sub($ep, $fp));
                 $up = self::rmul($items[0]['cf']['R'], $tc['up']);
-                // a camera looking steeply down (or up) at the item shows a squashed, top-heavy shape: keep it within 35 degrees of level
                 $maxY = sin(35 * M_PI / 180);
                 if (abs($dir[1]) > $maxY) {
                     $flat = sqrt(max(1e-9, $dir[0] * $dir[0] + $dir[2] * $dir[2]));
@@ -270,12 +256,8 @@ trait Scene {
                     $up = [0, 1, 0];
                 }
                 if (abs(self::dot($dir, self::norm($up))) < 0.98) {
-                    // the catalog cameras use wide lenses (often 70 degrees) set close in, which stretches whatever is nearest the
-                    // camera. Keep their angle but use a narrow lens from farther back; the fit below sizes the picture the same.
                     $fov = min($tc['fov'], self::ITEM_THUMB_FOV) * M_PI / 180;
                     $center = $fp;
-                    // some hats ship a ThumbnailCamera whose Focus was left somewhere else entirely (the picture then shows nothing
-                    // or only a corner). Keep the camera's angle and lens but aim it at the item.
                     $ic = [0, 0, 0];
                     $n = 0;
                     foreach ($items[0]['geom']['pos'] as $gp) { $q = self::cfApply($items[0]['cf'], $gp); for ($k = 0; $k < 3; $k++) { $ic[$k] += $q[$k]; } $n++; }
@@ -352,7 +334,6 @@ trait Scene {
         }
 
         if ($this->camZoom != 1.0) {
-            // the caller's zoom, applied last so the automatic fit above does not undo it (about the middle of the picture)
             $z = $this->camZoom;
             $vp = self::mul4([$z, 0, 0, 0, 0, $z, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1], $vp);
         }
@@ -436,8 +417,7 @@ trait Scene {
                 }
             }
         }
-        // see-through triangles (a hat's soft texture alpha, or a Handle with Transparency) are blended over everything solid,
-        // the farthest first, the way Roblox draws them
+        // see-through triangles are blended last, farthest first
         foreach ($glass as &$q) {
             $q['blend'] = true;
             $q['depth'] = $q['P'][1][0] * (($q['bx0'] + $q['bx1']) / 2 + 0.5) + $q['P'][1][1] * (($q['by0'] + $q['by1']) / 2 + 0.5) + $q['P'][1][2];
@@ -521,10 +501,8 @@ trait Scene {
             }
             $lightingOffset = null;
             if ($this->renderer === '2016') {
-                // DefaultHQVS carries normal/view direction to the pixel shader. The
-                // third legacy varying becomes only the positive-light specular gate.
                 $vy[2] = $ndl > 0 ? 1.0 : 0.0;
-                $lightingOffset = count($vy) + 2; // P starts with inverse-W and depth.
+                $lightingOffset = count($vy) + 2;
                 array_push($vy, $N[0], $N[1], $N[2], $eye[0] - $wx, $eye[1] - $wy, $eye[2] - $wz);
             }
             $V[] = [$cx, $cy, $cz, $cw, $vy];

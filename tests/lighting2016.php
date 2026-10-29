@@ -25,8 +25,6 @@ foreach ([[0, 0, -1], [1, 0, 0], [0, 1, 0]] as $normal) {
 }
 $frontDiffuse = $lighting['ambient'] + $lighting['key'] * -$L[2];
 lightingCheck($frontDiffuse > 0.70 && $frontDiffuse < 0.72, 'Front receives main light rather than weaker fill');
-// The HQ shader interpolates N and V, then evaluates the power at the fragment.
-// Center the mirror reflection on the center of a synthetic flat face.
 $T = ['lightingOffset' => 2, 'specPower' => 9];
 $P = [[0, 0, 1], [0, 0, 0], [0, 0, 0], [0, 0, 0], [0, 0, -1], [0.3, 0, -$L[0]], [0, 0.3, -$L[1]], [0, 0, $L[2]]];
 $center = lightingCall($a, 'specular2016', [$T, $P, 0, 0, 1, 1]);
@@ -35,7 +33,6 @@ $right = lightingCall($a, 'specular2016', [$T, $P, 1, 0, 1, 1]);
 lightingCheck(abs($center - 1) < 1e-12, 'HQ highlight reaches mirror peak at interior fragment');
 lightingCheck($center > ($left + $right) / 2 + 0.1, 'Interior highlight is nonlinear, not interpolated vertex brightness');
 lightingCheck(lightingCall($a, 'specular2016', [$T, $P, 0, 0, 1, 0]) === 0.0, 'Unlit specular gate is respected');
-// Reference has a dominant untextured leg-front RGB of 117,135,51.
 $r = $a->render(['size' => '150x150', 'smooth' => false]);
 $im = imagecreatefromstring($r['png']); $matches = 0;
 for ($y = 75; $y < 150; $y++) { for ($x = 0; $x < 150; $x++) {
@@ -49,8 +46,6 @@ foreach (['2012', '2016'] as $mode) {
     if ($mode === '2012') {
         lightingCheck($fast === $exact, '2012 hard-edge output agrees across rasterizers');
     } else {
-        // The rasterizers have different texture LOD rules at UV seams. Compare
-        // lighting on the flat leg interiors, away from those filtering edges.
         $fastImage = imagecreatefromstring($fast); $exactImage = imagecreatefromstring($exact); $samePlateau = 0;
         for ($y = 50; $y < 100; $y++) { for ($x = 0; $x < 100; $x++) {
             if ((imagecolorat($fastImage, $x, $y) & 0xFFFFFF) === 0x758733 && (imagecolorat($exactImage, $x, $y) & 0xFFFFFF) === 0x758733) { $samePlateau++; }

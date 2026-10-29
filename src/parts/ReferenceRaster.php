@@ -1,7 +1,7 @@
 <?php
 namespace Vanilla;
 
-// the slow rasteriser that samples every pixel fully
+// the slow rasteriser: samples every pixel fully
 trait ReferenceRaster {
     private function rasterise(array $tris, int $W, int $H, int $SS, Texture $stud, array $faceBox): string {
         $Wss = $W * $SS;
@@ -261,7 +261,6 @@ trait ReferenceRaster {
                         $G8 = $gg >= 1 ? 255 : ($gg <= 0 ? 0 : (int)($gg * 255 + 0.5));
                         $B8 = $bb >= 1 ? 255 : ($bb <= 0 ? 0 : (int)($bb * 255 + 0.5));
                         if (!empty($T['blend'])) {
-                            // see-through: blended over what is already there, and it does not hide what comes after it
                             $al = min(1.0, $ta * $T['alpha']);
                             if (!empty($T['sq'])) {
                                 $al *= $al;

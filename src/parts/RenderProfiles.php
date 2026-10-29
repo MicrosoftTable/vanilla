@@ -1,7 +1,7 @@
 <?php
 namespace Vanilla;
 
-// Source notes and the limits of the software profile are in docs/2016-renderer.md.
+// source notes and limits: docs/2016-renderer.md
 trait RenderProfiles {
     const RENDERERS = ['2012', '2016'];
     private $renderer = '2012';
@@ -21,21 +21,15 @@ trait RenderProfiles {
             $this->lighting = ['ambient' => self::AMBIENT, 'key' => self::KEY, 'fill' => self::FILL, 'direction' => self::LAMP_DIR];
             return;
         }
-        // Lighting.cpp defaults: 14:00, latitude 41.7333, Ambient .5, Brightness 1.
-        // G3D LightingParameters::setTime, at day zero, then RenderView::presetLighting.
         $angle = 14 / 24 * 2 * M_PI;
         $day = 14 / 24;
         $tilt = (-23.5 * cos(M_PI * ($day - 182.6282) / 182.6282) - 41.7333) * M_PI / 180;
-        // character3.rbxm faces world +Z (root yaw 180 degrees). Vanilla normalizes
-        // the character and camera to face -Z, so the world light must rotate too.
         $this->lighting = [
             'ambient' => 0.5, 'key' => 0.75 * 0.9, 'fill' => 0.75 * 0.9 * 0.4,
             'direction' => self::norm([-sin($angle) * cos($tilt), -cos($angle) * cos($tilt), sin($tilt)])
         ];
     }
 
-    // default.hlsl DefaultHQFS: normalize the interpolated normal and view vector,
-    // then evaluate the Blinn highlight per fragment, not at triangle vertices.
     private function specular2016(array $T, array $P, float $x, float $y, float $w, float $gate): float {
         if ($gate <= 0) { return 0.0; }
         $o = $T['lightingOffset'];
@@ -55,7 +49,6 @@ trait RenderProfiles {
         if ($this->renderer === '2012') {
             return [self::KS, self::SPEC_EXP];
         }
-        // MaterialGenerator::getSpecular: byte intensity, exponent. No normal maps here.
         $table = [256 => [102, 9], 272 => [191, 81], 288 => [191, 81],
             512 => [64, 32], 528 => [71, 53], 784 => [179, 54], 800 => [36, 20],
             816 => [38, 22], 832 => [48, 24], 848 => [33, 44], 864 => [18, 22],
@@ -75,8 +68,6 @@ trait RenderProfiles {
         if ($this->renderer !== '2016') {
             return self::accessoryCF($acc, $h, $cfs);
         }
-        // Accoutrement::buildWeld: only the first handle Attachment is considered.
-        // Names match exactly; unknown names fall back to legacy AttachmentPoint.
         $names = ['HatAttachment' => ['Head', 'hat'], 'HairAttachment' => ['Head', 'hair'],
             'FaceFrontAttachment' => ['Head', 'facefront'], 'FaceCenterAttachment' => ['Head', 'facecenter'],
             'NeckAttachment' => ['Torso', 'neck'], 'BodyFrontAttachment' => ['Torso', 'bodyfront'],

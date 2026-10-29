@@ -1,7 +1,6 @@
 <?php
 namespace Vanilla;
 
-// reading .mesh files and building the box and sphere meshes
 trait Meshes {
     static function parseMesh(string $bytes): array {
         $head = substr($bytes, 0, 12);
@@ -105,7 +104,6 @@ trait Meshes {
         return ['pos' => $pos, 'nrm' => $nrm, 'uv' => $uv];
     }
 
-    /** version 6 and 7: named chunks, the geometry inside COREMESH is draco compressed */
     private static function parseChunkedMesh(string $bytes): array {
         $o = 13;
         $n = strlen($bytes);
@@ -363,7 +361,7 @@ trait Meshes {
         return ['pos' => $pos, 'nrm' => $nrm, 'uv' => $uv];
     }
 
-    // ignores a texture alpha when most of what the mesh samples is transparent so hats dont vanish
+    // ignores texture alpha when most of what the mesh samples is transparent, so hats dont vanish
     static function alphaCutsOut(Img $img, array $uv): bool {
         $w = $img->w;
         $h = $img->h;

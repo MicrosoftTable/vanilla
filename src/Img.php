@@ -139,7 +139,7 @@ final class Img {
         return $n - memory_get_usage() > $bytes;
     }
 
-    // gd is the fast path and the php png reader is the fallback
+    // gd is the fast path, the php png reader is the fallback
     private static function decodeGD(string $b, int $maxSide, int $bigSide): ?Img {
         $info = @getimagesizefromstring($b);
         if (!$info || $info[0] < 1 || $info[1] < 1 || $info[0] > $bigSide || $info[1] > $bigSide || $info[0] * $info[1] > 16777216) {
@@ -229,7 +229,7 @@ final class Img {
         if (!$chan || !in_array($depth, [1, 2, 4, 8, 16], true)) {
             return false;
         }
-        // the most a valid image of this size can unpack to, so a compression bomb stops early
+        // a compression bomb stops early
         $rowBytes = (int)ceil($w * $chan * $depth / 8);
         $limit = $h * ($rowBytes + 1) + ($ihdr['inter'] ? 7 * ($h + 8) * 2 : 0) + 64;
         $raw = @zlib_decode($idat, $limit + 1);
@@ -578,11 +578,7 @@ final class Img {
         ) . $chunk('IDAT', gzcompress($raw, 9)) . $chunk('IEND', '');
     }
 
-
-    // formats avatar.php can send and their mime types
     const FORMATS = ['png' => 'image/png', 'webp' => 'image/webp', 'jpg' => 'image/jpeg'];
-
-    // a rendered png as another format, jpg has no alpha so it is flattened onto bg
 
     static function encode(string $png, string $format, int $bg = 0xffffff): ?string {
         if ($format === 'png') {
