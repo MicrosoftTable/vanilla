@@ -1,5 +1,5 @@
 <?php
-// get avatar.php with charapp or ids or item, colors, size, view, zoom, yaw, pitch, smooth, renderer, format, bg and sid
+// get avatar.php with charapp or ids or item, colors, size, view, zoom, yaw, pitch, camera, smooth, renderer, format, bg and sid
 declare(strict_types=1);
 umask(0077);
 require __DIR__ . '/src/Vanilla.php';
@@ -130,6 +130,13 @@ foreach (['zoom' => [0.25, 4], 'yaw' => [-180, 180], 'pitch' => [-80, 80]] as $k
         fail(400, "$k is a number from $lo to $hi.");
     }
     $cam[$k] = (float)$q[$k];
+}
+$camera = $q['camera'] ?? 'modern';
+if ($camera !== 'modern' && $camera !== 'classic') {
+    fail(400, 'camera is modern or classic.');
+}
+if ($camera === 'classic') {
+    $cam['camera'] = 'classic';
 }
 $sid = $q['sid'] ?? '';
 if ($sid !== '' && !preg_match('/^[0-9a-f]{16,32}$/D', $sid)) {

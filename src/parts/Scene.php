@@ -237,7 +237,7 @@ trait Scene {
             }
             $center = [($lo[0] + $hi[0]) / 2, ($lo[1] + $hi[1]) / 2, ($lo[2] + $hi[2]) / 2];
             $radius = sqrt(($hi[0] - $lo[0]) ** 2 + ($hi[1] - $lo[1]) ** 2 + ($hi[2] - $lo[2]) ** 2) / 2;
-            $fov = ($only === 'items' ? min(self::CAM_FOV, self::ITEM_THUMB_FOV) : self::CAM_FOV) * M_PI / 180;
+            $fov = ($only === 'items' ? ($this->camClassic ? self::CAM_FOV : min(self::CAM_FOV, self::ITEM_THUMB_FOV)) : self::CAM_FOV) * M_PI / 180;
             $dist = self::CAM_ZOOM * $radius / tan($fov / 2);
             $cd = $this->turnCamera(self::norm(self::CAM_DIR));
             $eye = [$center[0] + $cd[0] * $dist, $center[1] + $cd[1] * $dist, $center[2] + $cd[2] * $dist];
@@ -249,14 +249,14 @@ trait Scene {
                 $dir = self::norm(self::sub($ep, $fp));
                 $up = self::rmul($items[0]['cf']['R'], $tc['up']);
                 $maxY = sin(35 * M_PI / 180);
-                if (abs($dir[1]) > $maxY) {
+                if (!$this->camClassic && abs($dir[1]) > $maxY) {
                     $flat = sqrt(max(1e-9, $dir[0] * $dir[0] + $dir[2] * $dir[2]));
                     $k = sqrt(1 - $maxY * $maxY) / $flat;
                     $dir = [$dir[0] * $k, $dir[1] < 0 ? -$maxY : $maxY, $dir[2] * $k];
                     $up = [0, 1, 0];
                 }
                 if (abs(self::dot($dir, self::norm($up))) < 0.98) {
-                    $fov = min($tc['fov'], self::ITEM_THUMB_FOV) * M_PI / 180;
+                    $fov = ($this->camClassic ? $tc['fov'] : min($tc['fov'], self::ITEM_THUMB_FOV)) * M_PI / 180;
                     $center = $fp;
                     $ic = [0, 0, 0];
                     $n = 0;
@@ -271,6 +271,25 @@ trait Scene {
                     $camUp = self::norm($up);
                 }
             } catch (\Throwable $e) { $camUp = [0, 1, 0]; } }
+            if ($this->camClassic && $only === 'items') {
+                // classic keeps the wide 2012 lens, and the stretch that goes with it. Only when part of the item gets very close
+                // to the lens (a brim, a visor) does the camera back off, narrowing the lens by the same ratio so the size holds.
+                $vd = self::norm(self::sub($eye, $center));
+                $dist = sqrt(self::dot(self::sub($eye, $center), self::sub($eye, $center)));
+                $near = INF;
+                foreach ($items as $it) {
+                    foreach ($it['geom']['pos'] as $gp) {
+                        $q = self::cfApply($it['cf'], $gp);
+                        $near = min($near, $dist - self::dot(self::sub($q, $center), $vd));
+                    }
+                }
+                $want = self::CLASSIC_NEAR * max($radius, 0.5);
+                if ($near < $want) {
+                    $newDist = $dist + ($want - $near);
+                    $fov = 2 * atan(tan($fov / 2) * $dist / $newDist);
+                    $eye = [$center[0] + $vd[0] * $newDist, $center[1] + $vd[1] * $newDist, $center[2] + $vd[2] * $newDist];
+                }
+            }
             $vp = self::mul4(self::perspective($fov, $W / $H, 0.1, 200), self::lookAt($eye, $center, $camUp));
 
             $nx0 = 1e9;

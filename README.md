@@ -78,6 +78,7 @@ avatar.php?ids=1234,5678&colors=f5cd30,0d69ac,f5cd30,f5cd30,a4bd47,a4bd47&size=1
 | `zoom` | camera zoom, `1` (default) is the normal framing, `1.5` is closer, `0.6` is farther. 0.25 to 4 |
 | `yaw` | swing the camera around the avatar, in degrees from the default angle (-180 to 180). `0` is the default, positive and negative go opposite ways |
 | `pitch` | tilt the camera up or down from the default angle, in degrees (-80 to 80) |
+| `camera` | `modern` (default) or `classic`. classic is the original 2012 item thumbnail: the wide lens and the steep catalog angles, with their stretching. it only backs the camera off for a hat that gets very close to the lens, so brims and visors don't blow up |
 | `smooth` | `1` (default) or `0` for hard edges |
 | `sid` | 16 to 32 hex chars. a new render with the same sid deletes the previous one |
 

@@ -56,7 +56,7 @@ final class Avatar {
         '150x150' => [150, 150],
         '48x48' => [48, 48]
     ];
-    const HEAD_DIR = [0.0, 0.0, -1.0], HEAD_FOV = 42.84, HEAD_DIST = 3.405, HEAD_AIM = 0.0, HEAD_MAXOUT = 1.6, HEAD_NEAR = 2.6, ITEM_THUMB_FOV = 20.0;
+    const HEAD_DIR = [0.0, 0.0, -1.0], HEAD_FOV = 42.84, HEAD_DIST = 3.405, HEAD_AIM = 0.0, HEAD_MAXOUT = 1.6, HEAD_NEAR = 2.6, ITEM_THUMB_FOV = 20.0, CLASSIC_NEAR = 1.0;
     const VIEWS = ['body', 'head'];
     const MAX_ASSET_BYTES = 8 * 1024 * 1024, MAX_IMAGE_SIDE = 2048, MAX_MESH_VERTS = 150000, MAX_IDS = 12, MAX_ACCESSORIES = 8;
     const DEFAULT_COLORS = ['#f5cd30', '#0d69ac', '#f5cd30', '#f5cd30', '#a4bd47', '#a4bd47'];
@@ -73,7 +73,7 @@ final class Avatar {
     private static $base = null;
     private $exact = false;
     private $userAgent = 'Vanilla/1.0';
-    private $camZoom = 1.0, $camYaw = 0.0, $camPitch = 0.0;
+    private $camZoom = 1.0, $camYaw = 0.0, $camPitch = 0.0, $camClassic = false;
 
     function __construct(array $opts = []) {
         $this->assetBase = $opts['assetBase'] ?? 'https://example.com/asset/?id=';
@@ -132,6 +132,11 @@ final class Avatar {
         $this->camZoom = $get('zoom', 1.0, 0.25, 4.0);
         $this->camYaw = $get('yaw', 0.0, -180.0, 180.0);
         $this->camPitch = $get('pitch', 0.0, -80.0, 80.0);
+        $mode = $req['camera'] ?? 'modern';
+        if ($mode !== 'modern' && $mode !== 'classic') {
+            throw new \InvalidArgumentException('camera is modern or classic.');
+        }
+        $this->camClassic = $mode === 'classic';
     }
 
     function render(array $req): array {
