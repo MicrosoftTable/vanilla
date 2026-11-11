@@ -65,7 +65,7 @@ trait Assets {
         }
         if ($b === null || $b === false) {
             $b = null;
-            for ($n = 0; $n < 3 && $b === null; $n++) {
+            for ($n = 0; $n < ($this->fetcher ? 1 : 3) && $b === null; $n++) {
                 if ($n) {
                     usleep(400000 * $n);
                 }
