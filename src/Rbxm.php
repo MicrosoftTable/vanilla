@@ -11,8 +11,8 @@ final class Rbxm {
         return ['r' => $c[0] / 255, 'g' => $c[1] / 255, 'b' => $c[2] / 255];
     }
 
-    static function parse(string $bytes): array {
-        if (strlen($bytes) > self::MAX_BYTES) {
+    static function parse(string $bytes, int $maxBytes = self::MAX_BYTES): array {
+        if (strlen($bytes) > $maxBytes) {
             throw new \RuntimeException('model too large');
         }
         if (strlen($bytes) > 8 && substr($bytes, 0, 8) === '<roblox!') {

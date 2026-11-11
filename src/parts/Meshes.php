@@ -107,22 +107,62 @@ trait Meshes {
     private static function parseChunkedMesh(string $bytes): array {
         $o = 13;
         $n = strlen($bytes);
+        $core = null;
+        $lods = [];
         while ($o + 16 <= $n) {
             $name = rtrim(substr($bytes, $o, 8), "\0");
+            $ver = unpack('V', $bytes, $o + 8)[1];
             $size = unpack('V', $bytes, $o + 12)[1];
             $o += 16;
-            if ($name !== 'COREMESH') {
-                $o += $size;
-                continue;
-            }
-            if ($size < 8 || $o + $size > $n) {
+            if ($o + $size > $n) {
                 throw new \RuntimeException('truncated mesh');
             }
+            if ($name === 'COREMESH') {
+                $core = [$ver, $o, $size];
+            } elseif ($name === 'LODS' && $size >= 7) {
+                $cnt = unpack('V', $bytes, $o + 3)[1];
+                if ($cnt < 64 && 7 + $cnt * 4 <= $size) {
+                    for ($i = 0; $i < $cnt; $i++) {
+                        $lods[] = unpack('V', $bytes, $o + 7 + $i * 4)[1];
+                    }
+                }
+            }
+            $o += $size;
+        }
+        if (!$core) {
+            throw new \RuntimeException('mesh has no geometry');
+        }
+        [$ver, $o, $size] = $core;
+        if ($size < 8) {
+            throw new \RuntimeException('truncated mesh');
+        }
+        $P = null;
+        $N = null;
+        $U = null;
+        if ($ver === 1) {
+            $nv = unpack('V', $bytes, $o)[1];
+            $fo = $o + 4 + $nv * 40 + 4;
+            if ($fo > $o + $size) {
+                throw new \RuntimeException('truncated mesh');
+            }
+            $nf = unpack('V', $bytes, $fo - 4)[1];
+            if ($fo + $nf * 12 > $o + $size) {
+                throw new \RuntimeException('truncated mesh');
+            }
+            for ($i = 0; $i < $nv; $i++) {
+                $f = unpack('g8', $bytes, $o + 4 + $i * 40);
+                $P[] = [$f[1], $f[2], $f[3]];
+                $N[] = [$f[4], $f[5], $f[6]];
+                $U[] = [$f[7], $f[8]];
+            }
+            $faces = [];
+            for ($i = 0; $i < $nf; $i++) {
+                $f = unpack('V3', $bytes, $fo + $i * 12);
+                $faces[] = [$f[1], $f[2], $f[3]];
+            }
+        } else {
             $dl = unpack('V', $bytes, $o)[1];
             $m = Draco::decode($bytes, $o + 4, min($dl, $size - 4));
-            $P = null;
-            $N = null;
-            $U = null;
             foreach ($m['attrs'] as $a) {
                 if ($a['type'] === 0 && $a['nc'] === 3 && !$P) {
                     $P = $a['v'];
@@ -134,28 +174,34 @@ trait Meshes {
                     $N = $a['v'];
                 }
             }
-            if (!$P) {
-                throw new \RuntimeException('mesh has no positions');
-            }
-            if (count($m['faces']) * 3 > self::MAX_MESH_VERTS) {
-                throw new \RuntimeException('a mesh is too large');
-            }
-            $pos = [];
-            $nrm = [];
-            $uv = [];
-            foreach ($m['faces'] as $f) {
-                foreach ($f as $i) {
-                    if (!isset($P[$i])) {
-                        throw new \RuntimeException('bad mesh index');
-                    }
-                    $pos[] = $P[$i];
-                    $nrm[] = $N[$i] ?? [0.0, 1.0, 0.0];
-                    $uv[] = isset($U[$i]) ? [$U[$i][0], 1 - $U[$i][1]] : [0.0, 0.0];
-                }
-            }
-            return ['pos' => $pos, 'nrm' => $nrm, 'uv' => $uv];
+            $faces = array_values($m['faces']);
         }
-        throw new \RuntimeException('mesh has no geometry');
+        if (!$P) {
+            throw new \RuntimeException('mesh has no positions');
+        }
+        $from = 0;
+        $to = count($faces);
+        if (count($lods) >= 2 && $lods[0] < $lods[1] && $lods[1] <= $to) {
+            $from = $lods[0];
+            $to = $lods[1];
+        }
+        if (($to - $from) * 3 > self::MAX_MESH_VERTS) {
+            throw new \RuntimeException('a mesh is too large');
+        }
+        $pos = [];
+        $nrm = [];
+        $uv = [];
+        for ($t = $from; $t < $to; $t++) {
+            foreach ($faces[$t] as $i) {
+                if (!isset($P[$i])) {
+                    throw new \RuntimeException('bad mesh index');
+                }
+                $pos[] = $P[$i];
+                $nrm[] = $N[$i] ?? [0.0, 1.0, 0.0];
+                $uv[] = isset($U[$i]) ? [$U[$i][0], 1 - $U[$i][1]] : [0.0, 0.0];
+            }
+        }
+        return ['pos' => $pos, 'nrm' => $nrm, 'uv' => $uv];
     }
 
     static function meshBounds(array $m): array {

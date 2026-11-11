@@ -35,6 +35,13 @@ trait ItemRender {
         }
         $pkgIds = self::packageIds($body);
         $ids = $pkgIds ?: [$id];
+        foreach ((array)($req['with'] ?? []) as $extra) {
+            $extraId = self::parseId($extra);
+            if ($extraId !== null && !in_array($extraId, $ids, true)) {
+                $ids[] = $extraId;
+            }
+        }
+        $ids = array_slice($ids, 0, self::MAX_IDS);
         $this->loadWaves($ids);
         $look = self::emptyLook();
         foreach ($ids as $one) {
@@ -53,14 +60,10 @@ trait ItemRender {
             $look['only'] = 'items';
         } elseif (!$worn && !$clothes && ($look['headMesh'] || $look['faceSet']) && !$look['bodyMeshes']) {
             $look['only'] = 'head';
-        } elseif (!$worn && !$clothes && !$look['faceSet'] && !$look['headMesh'] && count($look['bodyMeshes']) === 1
-            && in_array(array_key_first($look['bodyMeshes']), ['torso', 'rightArm', 'leftArm', 'rightLeg', 'leftLeg'], true)) {
-            $look['only'] = 'part:' . array_key_first($look['bodyMeshes']);
-            $look['pkgview'] = true;
         } elseif ($clothes && !$body && !$worn && !$look['faceSet']) {
-            $gray = self::brick(194);
+            $white = self::brick(1);
             foreach ($look['colors'] as $k => $v) {
-                $look['colors'][$k] = $gray;
+                $look['colors'][$k] = $white;
             }
         } elseif (!$worn && !$clothes && !$body && !$look['faceSet']) {
             throw new \InvalidArgumentException('item is not a hat, gear, face, head, shirt, pants, t-shirt or package' . ($look['notes'] ? ' (' . $look['notes'][0] . ')' : ''));
@@ -93,10 +96,16 @@ trait ItemRender {
             $cm = $look['bodyMeshes'][$name] ?? null;
             if (!$cm) {
                 if ($pkg) {
-                    if (empty($look['pkgColors'])) {
-                        $look['colors'][$name] = self::brick(1);
+                    if ($tpl && empty($look['pkgColors']) && isset($base[$part])) {
+                        $look['colors'][$name] = self::brick(24);
+                        [$base[$part], $tile] = self::checkerMesh($base[$part], $tpl);
+                        $tex[$part] = new Texture($tile);
+                    } else {
+                        if (empty($look['pkgColors'])) {
+                            $look['colors'][$name] = self::brick(1);
+                        }
+                        $tex[$part] = false;
                     }
-                    $tex[$part] = false;
                 }
                 continue;
             }
@@ -138,9 +147,12 @@ trait ItemRender {
                     $off = [$off[0] - $neck[0], $off[1] - ($neck[1] + 0.5), $off[2] - $neck[2]];
                 }
             }
-            $mesh = $this->meshFrom($P['MeshId'] ?? null);
+            $variant = $shape ? self::headVariant($shape) : null;
+            $mesh = $variant ? self::cleanMesh($this->characterMesh2016($variant)) : $this->meshFrom($P['MeshId'] ?? null);
             $ownMesh = (bool)$mesh;
-            if ($mesh) {
+            if ($variant) {
+                $k = [1, 1, 1];
+            } elseif ($mesh) {
                 $k = $scale;
             } else {
                 $mesh = $base['headRaw'];

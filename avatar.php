@@ -5,7 +5,7 @@ umask(0077);
 require __DIR__ . '/src/Vanilla.php';
 $config = require __DIR__ . '/config.php';
 
-const RENDER_VERSION = 'vanilla-1.5-items';
+const RENDER_VERSION = 'vanilla-1.5-items-11';
 
 function fail(int $code, string $msg): void {
     http_response_code($code);

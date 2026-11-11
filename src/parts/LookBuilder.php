@@ -102,6 +102,44 @@ trait LookBuilder {
         return self::v3($P['size'] ?? $P['Size'] ?? $P['size3'] ?? $P['Size3'] ?? null, [1, 1, 1]);
     }
 
+    static function characterColors(array $roots): ?array {
+        $find = function (array $list, int $depth) use (&$find) {
+            foreach ($list as $x) {
+                if ($x->cls === 'Model') {
+                    $names = [];
+                    $hum = false;
+                    foreach ($x->children as $c) {
+                        if ($c->cls === 'Humanoid') $hum = true;
+                        if (in_array($c->cls, ['Part', 'MeshPart'], true)) $names[strtolower((string)$c->name)] = $c;
+                    }
+                    if ($hum && isset($names['head'], $names['torso'])) return [$x, $names];
+                }
+                if ($depth < 6 && ($r = $find($x->children, $depth + 1))) return $r;
+            }
+            return null;
+        };
+        $hit = $find($roots, 0);
+        if (!$hit) return null;
+        [$model, $parts] = $hit;
+        $hex = fn(array $c) => sprintf('#%02x%02x%02x', round($c[0] * 255), round($c[1] * 255), round($c[2] * 255));
+        foreach ($model->children as $c) {
+            if ($c->cls !== 'BodyColors') continue;
+            $out = [];
+            foreach (['HeadColor', 'TorsoColor', 'LeftArmColor', 'RightArmColor', 'LeftLegColor', 'RightLegColor'] as $k) {
+                $v3 = $c->props[$k . '3'] ?? null;
+                $v = $c->props[$k] ?? null;
+                if (is_array($v3) && isset($v3['r'])) $out[] = $hex([$v3['r'], $v3['g'], $v3['b']]);
+                else $out[] = $hex(self::brick(is_array($v) ? ($v['brick'] ?? 194) : (is_numeric($v) ? (int)$v : 194)));
+            }
+            return $out;
+        }
+        $out = [];
+        foreach (['head', 'torso', 'left arm', 'right arm', 'left leg', 'right leg'] as $n) {
+            $out[] = isset($parts[$n]) ? $hex(self::partColor($parts[$n])) : $hex(self::brick(194));
+        }
+        return $out;
+    }
+
     private static function partColor(Inst $h): array {
         $P = $h->props;
         $c = $P['Color3uint8'] ?? $P['Color'] ?? null;
@@ -337,7 +375,7 @@ trait LookBuilder {
     }
 
     private static function emptyLook(): array {
-        return ['colors' => ['head' => self::brick(24), 'torso' => self::brick(23), 'leftArm' => self::brick(24), 'rightArm' => self::brick(24), 'leftLeg' => self::brick(119), 'rightLeg' => self::brick(119)],
+        return ['colors' => ['head' => self::brick(194), 'torso' => self::brick(194), 'leftArm' => self::brick(194), 'rightArm' => self::brick(194), 'leftLeg' => self::brick(194), 'rightLeg' => self::brick(194)],
             'headMesh' => null, 'bodyMeshes' => [], 'shirt' => null, 'pants' => null, 'tshirt' => null, 'face' => null, 'faceSet' => false, 'headSize' => null, 'accessories' => [], 'tool' => null, 'only' => '', 'notes' => []];
     }
 
@@ -423,16 +461,28 @@ trait LookBuilder {
             $look['notes'][] = "$id: this is a bare image, not a shirt, pants, face, hat or gear asset, so it was refused";
             return;
         }
-        if (strpos($b, 'BodyColors') !== false && ($bc = CharApp::bodyColors($b)) !== null) {
-            $look['pkgColors'] = $bc;
-            return;
-        }
         try {
             $tree = Rbxm::parse($b);
         } catch (\Throwable $e) {
             $look['notes'][] = "$id: not a shirt, pants, face, hat or gear asset";
             return;
         }
+        if (!self::holdsWearable($tree['roots']) && strpos($b, 'BodyColors') !== false && ($bc = CharApp::bodyColors($b)) !== null) {
+            $look['pkgColors'] = $bc;
+            return;
+        }
         $this->absorbTree($look, $tree, $id);
+    }
+
+    private static function holdsWearable(array $list, int $depth = 0): bool {
+        foreach ($list as $x) {
+            if (in_array($x->cls, ['Tool', 'Hat', 'Accessory', 'Accoutrement'], true)) {
+                return true;
+            }
+            if ($depth < 8 && self::holdsWearable($x->children, $depth + 1)) {
+                return true;
+            }
+        }
+        return false;
     }
 }

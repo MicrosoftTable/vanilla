@@ -66,6 +66,22 @@ trait Character2016 {
         return $value === '' || $value === '0' ? null : $value;
     }
 
+    private static function headVariant($shape): ?string {
+        if (!$shape || ($shape->cls !== 'CylinderMesh' && $shape->cls !== 'BlockMesh')) { return null; }
+        $p = $shape->props;
+        $b = (float)($p['Bevel'] ?? 0);
+        $r = (float)($p['Bevel Roundness'] ?? ($p['Roundness'] ?? 0));
+        $u = (float)($p['Bulge'] ?? 0);
+        $variants = $shape->cls === 'CylinderMesh'
+            ? ['A' => [0, 0, 0.5], 'C' => [0.1, 0, 0.5], 'D' => [0.4, 0, 0], 'E' => [0.66, 0, 0.5],
+                'F' => [0, 0, 0], 'G' => [0, 0, 1], 'H' => [0.2, 0, 1], 'N' => [0.4, 1, 0], 'O' => [0.2, 0, 0.5], 'P' => [0.1, 0, 0]]
+            : ['B' => [0, 0, 0], 'I' => [0.5, 0, 0], 'J' => [0.3, 0, 0], 'M' => [0.05, 0, 0]];
+        foreach ($variants as $suffix => $v) {
+            if (max(abs($b - $v[0]), abs($r - $v[1]), abs($u - $v[2])) < 1e-5) { return 'head' . $suffix; }
+        }
+        return null;
+    }
+
     private function headGeometry2016(array &$look): array {
         $shape = $look['headMesh'];
         if (!$shape) { return $this->characterMesh2016('head'); }
@@ -77,14 +93,7 @@ trait Character2016 {
         $offset = self::v3($p['Offset'] ?? null, [0, 0, 0]);
         $name = 'head';
         if ($shape->cls === 'CylinderMesh' || $shape->cls === 'BlockMesh') {
-            $b = (float)($p['Bevel'] ?? 0); $r = (float)($p['Roundness'] ?? 0); $u = (float)($p['Bulge'] ?? 0);
-            $variants = $shape->cls === 'CylinderMesh'
-                ? ['A' => [0, 0, 0.5], 'C' => [0.1, 0, 0.5], 'D' => [0.4, 0, 0], 'E' => [0.66, 0, 0.5],
-                    'F' => [0, 0, 0], 'G' => [0, 0, 1], 'H' => [0.2, 0, 1], 'N' => [0.4, 1, 0], 'O' => [0.2, 0, 0.5], 'P' => [0.1, 0, 0]]
-                : ['B' => [0, 0, 0], 'I' => [0.5, 0, 0], 'J' => [0.3, 0, 0], 'M' => [0.05, 0, 0]];
-            foreach ($variants as $suffix => $v) {
-                if (max(abs($b - $v[0]), abs($r - $v[1]), abs($u - $v[2])) < 1e-5) { $name .= $suffix; break; }
-            }
+            $name = self::headVariant($shape) ?? 'head';
             $scale = [1, 1, 1];
         } elseif ($type === 3 || $type === 'Sphere') {
             $name = 'headL';

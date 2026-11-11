@@ -5,13 +5,13 @@ foreach (['BrickColors', 'Net', 'Inst', 'Rbxm', 'Img', 'PngStream', 'Texture', '
     require_once __DIR__ . '/' . $file . '.php';
 }
 
-foreach (['RenderProfiles', 'Character2016', 'Particles2016', 'Geometry', 'Assets', 'Meshes', 'LookBuilder', 'Particles', 'ItemRender', 'Scene', 'FastRaster', 'ReferenceRaster'] as $part) {
+foreach (['RenderProfiles', 'Character2016', 'Particles2016', 'Geometry', 'Assets', 'Meshes', 'LookBuilder', 'Particles', 'ItemRender', 'Scene', 'SceneRender', 'FastRaster', 'ReferenceRaster'] as $part) {
     require_once __DIR__ . '/parts/' . $part . '.php';
 }
 
 // vanilla is a software renderer in plain php: no gpu, no webgl, no rcc
 final class Avatar {
-    use RenderProfiles, Character2016, Particles2016, Geometry, Assets, Meshes, LookBuilder, Particles, ItemRender, Scene, FastRaster, ReferenceRaster;
+    use RenderProfiles, Character2016, Particles2016, Geometry, Assets, Meshes, LookBuilder, Particles, ItemRender, Scene, SceneRender, FastRaster, ReferenceRaster;
 
     const TPL_W = 585, TPL_H = 559;
     const TEMPLATE = [

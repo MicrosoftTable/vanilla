@@ -110,7 +110,21 @@ avatar.php?item=1234&size=420x420
 
 anything else (bare images, models without one of the above) is refused.
 
-note on packages: when a package is a single body part, that part is rendered separately (on its own, close up and straight on), and its position is not accurate to how roblox did it. that's on purpose, vanilla takes a different approach here.
+### rendering places, models and meshes
+
+`renderScene()` draws a whole place, model or bare mesh file. It is PHP only and is not exposed by `avatar.php`:
+
+```php
+$r = $avatar->renderScene(['kind' => 'place', 'bytes' => $file, 'width' => 1280, 'height' => 720, 'outWidth' => 854, 'outHeight' => 480]);
+```
+
+`kind` is `place`, `model` or `mesh`. It draws parts, wedges, cylinders, balls, special meshes, mesh textures, decals on plain parts, stud and inlet surfaces, and materials. A place also shows any saved `Hint` and `Message` text, like the game does.
+
+Materials are generated patterns, not the original textures, so they give the feel of wood, brick, grass and so on. Neon is drawn unlit and Glass is see-through. Surface detail gets gradually softer with distance, so far surfaces don't shimmer.
+
+A place uses a `ThumbnailCamera` in the world if it has one, otherwise the camera position saved in the file (`Workspace.CurrentCamera`), so a decal on a part in front of the camera works as a thumbnail. `ThumbnailCamera` objects inside tools and hats belong to those items and are ignored. If the saved camera shows nothing, you get an overview of the map.
+
+It does not draw terrain, weld or hinge surfaces, `Texture` objects, clothing, or the place's own skybox. Decals are drawn at full brightness.
 
 ### asset versions
 
@@ -138,6 +152,8 @@ $r = (new Vanilla\Avatar(['assetBase' => 'https://your.host/asset/?id=', 'cacheD
     ->render(['charapp' => 'https://your.host/charapp', 'size' => '150x200']);
 file_put_contents('thumb.png', $r['png']);
 ```
+
+if your assets sit on the same machine, pass a `fetcher` instead of making vanilla download them: a function that takes an asset id (or an `rbxasset://` path) and returns the bytes, or `null` when there is no such asset. vanilla asks a fetcher once and takes `null` as missing, so it does no retries or waiting of its own. one `Avatar` can render several times, and later renders reuse the meshes and images the earlier ones loaded, so render the body and the head from the same object.
 
 ## 2016 rendering option
 
@@ -175,7 +191,7 @@ config.php            your settings
 src/Vanilla.php       the renderer, render() is the entry point
 src/CharApp.php       reads charapp links and lists
 src/Net.php           all outside requests, public addresses only
-src/parts/            the renderer split by job (assets, meshes, look building, particles, scene, rasterisers)
+src/parts/            the renderer split by job (assets, meshes, look building, particles, scene, whole-scene renders, rasterisers)
 src/Rbxm.php          reads roblox models (xml and binary)
 src/Img.php           image decoding and drawing
 data/                 the body meshes and textures

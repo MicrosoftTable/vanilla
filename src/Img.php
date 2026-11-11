@@ -73,7 +73,7 @@ final class Img {
         if (!self::memoryRoom((int)($info[0] * $info[1] * 5 + min($info[0], $cap) * min($info[1], $cap) * 24))) {
             return null;
         }
-        $g = @imagecreatefromstring($b);
+        $g = self::gdFromBytes($b);
         if (!$g) {
             return null;
         }
@@ -122,6 +122,52 @@ final class Img {
         return new Img($w, $h, $px);
     }
 
+    private static function gdFromBytes(string $b) {
+        $g = @imagecreatefromstring($b);
+        if ($g || substr($b, 0, 4) !== "\x89PNG") {
+            return $g;
+        }
+        $clean = self::dropPngTextChunks($b);
+        return $clean === null ? false : @imagecreatefromstring($clean);
+    }
+
+    private static function dropPngTextChunks(string $b): ?string {
+        $out = substr($b, 0, 8);
+        $n = strlen($b);
+        $o = 8;
+        $dropped = false;
+        while ($o + 12 <= $n) {
+            $len = unpack('N', substr($b, $o, 4))[1];
+            $type = substr($b, $o + 4, 4);
+            $fits = $len <= $n - $o - 12;
+            if (in_array($type, ['iTXt', 'tEXt', 'zTXt'], true)) {
+                $dropped = true;
+                if ($fits && (crc32($type . substr($b, $o + 8, $len)) & 0xffffffff) === unpack('N', substr($b, $o + 8 + $len, 4))[1]) {
+                    $o += $len + 12;
+                    continue;
+                }
+                $next = null;
+                foreach (['PLTE', 'tRNS', 'IDAT', 'IEND'] as $t) {
+                    $p = strpos($b, $t, $o + 8);
+                    if ($p !== false && ($next === null || $p < $next)) {
+                        $next = $p;
+                    }
+                }
+                if ($next === null || $next < 4) {
+                    return null;
+                }
+                $o = $next - 4;
+                continue;
+            }
+            if (!$fits) {
+                return null;
+            }
+            $out .= substr($b, $o, $len + 12);
+            $o += $len + 12;
+        }
+        return $dropped ? $out : null;
+    }
+
     private static function memoryRoom(int $bytes): bool {
         $l = trim((string)ini_get('memory_limit'));
         if ($l === '' || $l === '-1') {
@@ -150,7 +196,7 @@ final class Img {
         if (!self::memoryRoom((int)($info[0] * $info[1] * 5 + $kept * 24))) {
             return null;
         }
-        $g = @imagecreatefromstring($b);
+        $g = self::gdFromBytes($b);
         if (!$g) {
             return null;
         }
