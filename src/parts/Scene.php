@@ -7,17 +7,18 @@ trait Scene {
             return null;
         }
         foreach ($acc->children as $c) {
-            if ($c->cls !== 'Camera' || !isset($c->props['CFrame'])) {
+            $cc = $c->props['CFrame'] ?? ($c->props['CoordinateFrame'] ?? null);
+            if ($c->cls !== 'Camera' || $cc === null) {
                 continue;
             }
             $inv = self::cfInv(self::cfFrom($h->props['CFrame']));
-            $cam = self::cfMul($inv, self::cfFrom($c->props['CFrame']));
-            $fp  = self::cfApply($inv, self::cfFrom($c->props['Focus'] ?? $c->props['CFrame'])['p']);
+            $cam = self::cfMul($inv, self::cfFrom($cc));
+            $fp  = self::cfApply($inv, self::cfFrom($c->props['Focus'] ?? $cc)['p']);
             if (self::dot(self::sub($cam['p'], $fp), self::sub($cam['p'], $fp)) < 1e-6) {
                 return null;
             }
             $fov = (float)($c->props['FieldOfView'] ?? 70);
-            return ['eye' => $cam['p'], 'up' => [$cam['R'][1], $cam['R'][4], $cam['R'][7]], 'focus' => $fp, 'fov' => min(90, max(15, $fov ?: 70))];
+            return ['hR' => self::cfFrom($h->props['CFrame'])['R'], 'eye' => $cam['p'], 'up' => [$cam['R'][1], $cam['R'][4], $cam['R'][7]], 'focus' => $fp, 'fov' => min(90, max(15, $fov ?: 70))];
         }
         return null;
     }
@@ -79,6 +80,10 @@ trait Scene {
         }
         $base = $this->base();
         $only = $look['only'];
+        if ($only === 'items' && $this->camClassic && $this->renderer === '2012') {
+            $d = self::LAMP_DIR;
+            $this->lighting['direction'] = [-$d[0], $d[1], -$d[2]];
+        }
         $partTex = [];
         $headTex = null;
         if ($this->renderer === '2016') {
@@ -124,6 +129,8 @@ trait Scene {
                     $look['notes']
                 );
                 if ($it) {
+                    $it['isTool'] = true;
+                    try { $it['thumbCam'] = self::thumbCamOf($look['tool'], $th); } catch (\Throwable $e) { $it['thumbCam'] = null; }
                     $items[] = $it;
                 }
             }
@@ -242,6 +249,19 @@ trait Scene {
             $cd = $this->turnCamera(self::norm(self::CAM_DIR));
             $eye = [$center[0] + $cd[0] * $dist, $center[1] + $cd[1] * $dist, $center[2] + $cd[2] * $dist];
             $camUp = [0, 1, 0];
+            $classicPlain = $this->camClassic && $only === 'items';
+            if ($classicPlain) {
+                $hr = count($items) === 1 ? sqrt($items[0]['size'][0] ** 2 + $items[0]['size'][1] ** 2 + $items[0]['size'][2] ** 2) / 2 : $radius;
+                $dist = self::CLASSIC_ITEM_DIST * $hr;
+                if (count($items) === 1 && empty($items[0]['isTool'])) {
+                    $cd = self::norm(self::rmul($items[0]['cf']['R'], $cd));
+                    if ($this->renderer === '2012') {
+                        $d = self::LAMP_DIR;
+                        $this->lighting['direction'] = self::norm(self::rmul($items[0]['cf']['R'], [-$d[0], $d[1], -$d[2]]));
+                    }
+                }
+                $eye = [$center[0] + $cd[0] * $dist, $center[1] + $cd[1] * $dist, $center[2] + $cd[2] * $dist];
+            }
             if ($only === 'items' && count($items) === 1 && !empty($items[0]['thumbCam'])) { try {
                 $tc = $items[0]['thumbCam'];
                 $fp = self::cfApply($items[0]['cf'], $tc['focus']);
@@ -267,11 +287,19 @@ trait Scene {
                         $center = $ib;
                     }
                     $dist = max(1.0 * $radius, 0.5) / tan($fov / 2);
+                    if ($this->camClassic) {
+                        $center = $fp;
+                        $dist = sqrt(self::dot(self::sub($ep, $fp), self::sub($ep, $fp)));
+                        if ($this->renderer === '2012' && !empty($tc['hR'])) {
+                            $d = self::LAMP_DIR;
+                            $this->lighting['direction'] = self::norm(self::rmul(self::mm($items[0]['cf']['R'], self::tr($tc['hR'])), [-$d[0], $d[1], -$d[2]]));
+                        }
+                    }
                     $eye = [$center[0] + $dir[0] * $dist, $center[1] + $dir[1] * $dist, $center[2] + $dir[2] * $dist];
                     $camUp = self::norm($up);
                 }
             } catch (\Throwable $e) { $camUp = [0, 1, 0]; } }
-            if ($this->camClassic && $only === 'items') {
+            if ($this->camClassic && $only === 'items' && !$classicPlain) {
                 // classic keeps the wide 2012 lens, and the stretch that goes with it. Only when part of the item gets very close
                 // to the lens (a brim, a visor) does the camera back off, narrowing the lens by the same ratio so the size holds.
                 $vd = self::norm(self::sub($eye, $center));
@@ -341,7 +369,7 @@ trait Scene {
                     $ndc(self::cfApply($it['cf'], $p));
                 }
             }
-            if ($nx1 > $nx0) {
+            if ($nx1 > $nx0 && !$classicPlain) {
                 $s = 0.94 / max(($nx1 - $nx0) / 2, ($ny1 - $ny0) / 2);
                 if (!$only) {
                     $s = min(1, $s);
