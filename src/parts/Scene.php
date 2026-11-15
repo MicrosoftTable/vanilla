@@ -80,6 +80,7 @@ trait Scene {
         }
         $base = $this->base();
         $only = $look['only'];
+        $this->envBlack2012 = $only === 'items' && $this->camClassic;
         if ($only === 'items' && $this->camClassic && $this->renderer === '2012') {
             $d = self::LAMP_DIR;
             $this->lighting['direction'] = [-$d[0], $d[1], -$d[2]];
@@ -428,7 +429,7 @@ trait Scene {
         }
         foreach ($items as $it) {
             if ($it['tex']) {
-                $calls[] = [$it['geom'], $it['cf'], 3, null, $it['tex'], false, null, $it['tint'], $it['material'] ?? 256, $it['alpha'] ?? 1.0, self::blendsItem($it)];
+                $calls[] = [$it['geom'], $it['cf'], 3, null, $it['tex'], false, null, $it['tint'], $it['material'] ?? 256, $it['alpha'] ?? 1.0, self::blendsItem($it), $it['reflectance'] ?? 0.0];
             } else {
                 $calls[] = [
                     $it['geom'],
@@ -445,7 +446,8 @@ trait Scene {
                     [1, 1, 1],
                     $it['material'] ?? 256,
                     $it['alpha'] ?? 1.0,
-                    self::blendsItem($it)
+                    self::blendsItem($it),
+                    $it['reflectance'] ?? 0.0
                 ];
             }
         }
@@ -507,6 +509,8 @@ trait Scene {
         $L = $this->lighting['direction'];
         [$specular, $specPower] = $this->materialSpecular($call[8] ?? 256);
         $n = count($g['pos']);
+        $reflectance = (float)($call[11] ?? 0.0);
+        $reflParams = $this->renderer === '2012' && $reflectance > 0 && ($mode === 0 || $mode === 3) ? self::reflectionParams2012($reflectance) : null;
         $V = [];
         for ($i = 0; $i < $n; $i++) {
             $p = $g['pos'][$i];
@@ -550,6 +554,11 @@ trait Scene {
             if ($this->renderer === '2016') {
                 $vy[2] = $ndl > 0 ? 1.0 : 0.0;
                 $lightingOffset = count($vy) + 2;
+                array_push($vy, $N[0], $N[1], $N[2], $eye[0] - $wx, $eye[1] - $wy, $eye[2] - $wz);
+            }
+            $reflOffset = null;
+            if ($reflParams) {
+                $reflOffset = count($vy) + 2;
                 array_push($vy, $N[0], $N[1], $N[2], $eye[0] - $wx, $eye[1] - $wy, $eye[2] - $wz);
             }
             $V[] = [$cx, $cy, $cz, $cw, $vy];
@@ -602,7 +611,7 @@ trait Scene {
             $tris[] = [
                 'bx0' => max(0, (int)ceil(min($x0, $x1, $x2) - 0.5)), 'bx1' => min($Wss - 1, (int)floor(max($x0, $x1, $x2) - 0.5)),
                 'by0' => max(0, (int)ceil(min($y0, $y1, $y2) - 0.5)), 'by1' => min($Hss - 1, (int)floor(max($y0, $y1, $y2) - 0.5)),
-                'e' => [$a0, $b0, $c0, $a1, $b1, $c1], 'P' => $P, 'mode' => $mode, 'color' => $color, 'tex' => $tex, 'studs' => $studs, 'half' => $half, 'tint' => $tint, 'specular' => $specular, 'specPower' => $specPower, 'lightingOffset' => $lightingOffset, 'alpha' => (float)($call[9] ?? 1.0), 'sq' => $this->renderer === '2012',
+                'e' => [$a0, $b0, $c0, $a1, $b1, $c1], 'P' => $P, 'mode' => $mode, 'color' => $color, 'tex' => $tex, 'studs' => $studs, 'half' => $half, 'tint' => $tint, 'specular' => $specular, 'specPower' => $specPower, 'lightingOffset' => $lightingOffset, 'refl' => $reflParams, 'reflOffset' => $reflOffset, 'alpha' => (float)($call[9] ?? 1.0), 'sq' => $this->renderer === '2012',
             ];
         }
     }

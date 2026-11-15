@@ -140,6 +140,9 @@ trait FastRaster {
             $r += $sp;
             $gg += $sp;
             $bb += $sp;
+            if (isset($T['reflOffset'])) {
+                [$r, $gg, $bb] = $this->reflect2012($T, $P, $x, $y, $w, $r, $gg, $bb);
+            }
             $R8 = $r >= 1 ? 255 : ($r <= 0 ? 0 : (int)($r * 255 + 0.5));
             $G8 = $gg >= 1 ? 255 : ($gg <= 0 ? 0 : (int)($gg * 255 + 0.5));
             $B8 = $bb >= 1 ? 255 : ($bb <= 0 ? 0 : (int)($bb * 255 + 0.5));
