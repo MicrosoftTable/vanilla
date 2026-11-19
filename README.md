@@ -12,6 +12,129 @@
   <img src="https://img.shields.io/badge/php-7.4%2B-777bb4?style=flat-square&logo=php&logoColor=white" alt="php 7.4+">
 </p>
 
+
+# Adding more poses
+
+ts draws the character in a fixed pose. A pose is a set of joint rotations applied to the body parts before drawing. This guide shows how to add a new one.
+
+## Where poses live
+
+A pose name is checked in three places, and each one has to accept it:
+
+| File | What it does |
+|------|--------------|
+| `src/Vanilla.php` | The `$allowedPoses` list in `render()`. Unknown names are rejected here. |
+| `src/parts/Scene.php` | `applyPose()`, which turns the pose name into joint rotations. |
+| `src/parts/Scene.php` | `poseRotationX()` and `poseRotationZ()`, the rotation helpers. |
+
+If you're using Vanilla inside a Laravel app, the app may keep its own list too (for example in `AvatarRenderer` or a controller). Add the new name there as well.
+
+## How a pose works
+
+Each limb rotates around a **pivot**, which is its joint in the torso's space. For the R6 body:
+
+- Shoulders: `[-1, 0.5, 0]` (left) and `[1, 0.5, 0]` (right)
+- Hips: `[-0.5, -1, 0]` (left) and `[0.5, -1, 0]` (right)
+
+`applyPose()` rotates a part around its pivot with this sequence:
+
+1. Find the pivot in the torso's space: `self::cfApply($torso, $pivot)`
+2. Build a rotation around that point: move to the pivot, rotate, move back
+3. Apply it to the part: `$cfs[$part] = self::cfMul($around, $cfs[$part]);`
+
+The angles are in radians. `M_PI / 2` is 90 degrees.
+
+## Step 1: Add the name to the allow list
+
+In `src/Vanilla.php`, inside `render()`, find `$allowedPoses` and add your name:
+
+```php
+$allowedPoses = [
+    'standing',
+    'overlord',
+    'walking',
+    'sitting',
+    'tpose',
+    'zombie',
+    'cheer', // new
+];
+```
+
+## Step 2: Add the rotations
+
+In `src/parts/Scene.php`, inside `applyPose()`, add a branch for your pose. Put it with the other pose branches, before the code that handles the default pose.
+
+Here's a `cheer` pose where both arms raise up and out:
+
+```php
+if ($pose === 'cheer') {
+    $rot = [
+        'Left Arm'  => self::poseRotationZ(-2.8),
+        'Right Arm' => self::poseRotationZ(2.8),
+    ];
+
+    $shoulder = [
+        'Left Arm'  => [-1, 0.5, 0],
+        'Right Arm' => [1, 0.5, 0],
+    ];
+
+    foreach ($rot as $part => $R) {
+        $p = self::cfApply($torso, $shoulder[$part]);
+
+        $around = self::cfMul(
+            self::cfMul(self::CF($p), self::CF([0, 0, 0], $R)),
+            self::CF([-$p[0], -$p[1], -$p[2]])
+        );
+
+        $cfs[$part] = self::cfMul($around, $cfs[$part]);
+    }
+
+    return $cfs;
+}
+```
+`poseRotationZ` rotates around the Z axis (arms swing out to the sides). `poseRotationX` rotates around the X axis (arms swing forward or back). Choose the helper that matches the direction you want.
+
+## Step 3: Test it
+
+Render the pose through Vanilla directly:
+
+```php
+$avatar = new \Vanilla\Avatar([...]); // your usual config
+$result = $avatar->render([
+    'ids' => [],
+    'colors' => [24, 23, 24, 24, 119, 119],
+    'size' => '150x200',
+    'renderer' => '2012',
+    'pose' => 'cheer',
+]);
+file_put_contents('cheer.png', $result['png']);
+```
+
+Open `cheer.png` and check:
+
+- Both arms rise and point the same way.
+- The arms start at the shoulders and don't cut into the torso.
+- The legs and torso didn't move.
+
+## Adjusting a pose
+
+- **Arm is in the wrong place:** change the angle. Angles go up with bigger values, but the sign depends on the axis, so flip the sign if it goes the wrong way.
+- **Arm rotates from the wrong point:** check the pivot. It should sit where the limb joins the torso.
+- **Pose name is rejected:** the name is missing from one of the lists in the table above. Check `$allowedPoses` first.
+
+## Adding a pose with legs
+
+Legs use the hip pivots, `[±0.5, -1, 0]`. Walking and sitting work the same way: rotate the leg part around its hip pivot. Use `poseRotationX` for forward and backward motion.
+
+## Checklist
+
+- [ ] Name added to `$allowedPoses` in `src/Vanilla.php`
+- [ ] Branch added to `applyPose()` in `src/parts/Scene.php`
+- [ ] Name added to any app-side allow list
+- [ ] Rendered and checked against the list above
+
+ok bye. thanks claude for writing this tutorial...... gulp
+
 ---
 
 renders 2012 style roblox avatars in php (a recreation, see below, not a port of rccservice). you give it a charapp (or asset ids and body colors) and it gives you back a png. runs on regular shared hosting, no gpu or webgl or anything.

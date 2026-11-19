@@ -232,8 +232,6 @@ trait LookBuilder {
             'fx' => array_values(array_filter($h->children, function ($c) {
             return in_array($c->cls, ['Fire', 'Smoke', 'Sparkles'], true);
         }))];
-        $rf = $h->props['Reflectance'] ?? 0;
-        $item['reflectance'] = is_numeric($rf) ? max(0.0, min(1.0, (float)$rf)) : 0.0;
         $tr = $h->props['Transparency'] ?? 0;
         $item['alpha'] = is_numeric($tr) ? max(0.0, min(1.0, 1.0 - (float)$tr)) : 1.0;
         $P = $sm ? $sm->props : [];
@@ -432,7 +430,7 @@ trait LookBuilder {
         try {
             $tree = Rbxm::parse($b);
         } catch (\Throwable $e) {
-            $look['notes'][] = "$id: not a shirt, pants, face, hat or gear asset";
+            $look['notes'][] = "$id: RBXM parsing failed: " . $e->getMessage();
             return;
         }
         $this->absorbTree($look, $tree, $id);

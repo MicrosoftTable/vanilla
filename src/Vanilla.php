@@ -1,17 +1,19 @@
 <?php
+
 namespace Vanilla;
 
 foreach (['BrickColors', 'Net', 'Inst', 'Rbxm', 'Img', 'PngStream', 'Texture', 'Draco', 'CharApp'] as $file) {
     require_once __DIR__ . '/' . $file . '.php';
 }
 
-foreach (['RenderProfiles', 'Character2016', 'Particles2016', 'Reflection2012', 'Geometry', 'Assets', 'Meshes', 'LookBuilder', 'Particles', 'ItemRender', 'Scene', 'FastRaster', 'ReferenceRaster'] as $part) {
+foreach (['RenderProfiles', 'Character2016', 'Particles2016', 'Geometry', 'Assets', 'Meshes', 'LookBuilder', 'Particles', 'ItemRender', 'Scene', 'FastRaster', 'ReferenceRaster'] as $part) {
     require_once __DIR__ . '/parts/' . $part . '.php';
 }
 
 // vanilla is a software renderer in plain php: no gpu, no webgl, no rcc
-final class Avatar {
-    use RenderProfiles, Character2016, Particles2016, Reflection2012, Geometry, Assets, Meshes, LookBuilder, Particles, ItemRender, Scene, FastRaster, ReferenceRaster;
+final class Avatar
+{
+    use RenderProfiles, Character2016, Particles2016, Geometry, Assets, Meshes, LookBuilder, Particles, ItemRender, Scene, FastRaster, ReferenceRaster;
 
     const TPL_W = 585, TPL_H = 559;
     const TEMPLATE = [
@@ -56,7 +58,7 @@ final class Avatar {
         '150x150' => [150, 150],
         '48x48' => [48, 48]
     ];
-    const HEAD_DIR = [0.0, 0.0, -1.0], HEAD_FOV = 42.84, HEAD_DIST = 3.405, HEAD_AIM = 0.0, HEAD_MAXOUT = 1.6, HEAD_NEAR = 2.6, ITEM_THUMB_FOV = 20.0, CLASSIC_NEAR = 1.0, CLASSIC_ITEM_DIST = 1.64;
+    const HEAD_DIR = [0.0, 0.0, -1.0], HEAD_FOV = 42.84, HEAD_DIST = 3.405, HEAD_AIM = 0.0, HEAD_MAXOUT = 1.6, HEAD_NEAR = 2.6, ITEM_THUMB_FOV = 20.0, CLASSIC_NEAR = 1.0;
     const VIEWS = ['body', 'head'];
     const MAX_ASSET_BYTES = 8 * 1024 * 1024, MAX_IMAGE_SIDE = 2048, MAX_MESH_VERTS = 150000, MAX_IDS = 12, MAX_ACCESSORIES = 8;
     const DEFAULT_COLORS = ['#f5cd30', '#0d69ac', '#f5cd30', '#f5cd30', '#a4bd47', '#a4bd47'];
@@ -75,7 +77,8 @@ final class Avatar {
     private $userAgent = 'Vanilla/1.0';
     private $camZoom = 1.0, $camYaw = 0.0, $camPitch = 0.0, $camClassic = false;
 
-    function __construct(array $opts = []) {
+    function __construct(array $opts = [])
+    {
         $this->assetBase = $opts['assetBase'] ?? 'https://example.com/asset/?id=';
         $this->allowedHosts = (array)($opts['allowedHosts'] ?? []);
         $this->allowPrivate = !empty($opts['allowPrivateHosts']);
@@ -89,11 +92,13 @@ final class Avatar {
         $this->selectRenderer($this->defaultRenderer);
     }
 
-    private function base(): array {
+    private function base(): array
+    {
         return self::$base ?: $this->buildBase();
     }
 
-    private function buildBase(): array {
+    private function buildBase(): array
+    {
         $D = $this->dataDir;
         $hm = self::parseMesh(file_get_contents("$D/head.mesh"));
         $k = self::HEAD_SCALE;
@@ -106,7 +111,9 @@ final class Avatar {
             return self::templateMesh(self::parseMesh(file_get_contents("$D/$f")), $hx, $hy, $hz, $region);
         };
         return self::$base = [
-            'head' => $hm, 'headRaw' => self::parseMesh(file_get_contents("$D/head.mesh")), 'headBox' => self::meshBounds($hm),
+            'head' => $hm,
+            'headRaw' => self::parseMesh(file_get_contents("$D/head.mesh")),
+            'headBox' => self::meshBounds($hm),
             'torso' => $part('torso.mesh', 1, 1, 0.5, $T['torso']),
             'rightArm' => $part('rightarm.mesh', 0.5, 1, 0.5, $T['right']),
             'leftArm' => $part('leftarm.mesh', 0.5, 1, 0.5, $T['left']),
@@ -119,7 +126,8 @@ final class Avatar {
         ];
     }
 
-    private function selectCamera(array $req): void {
+    private function selectCamera(array $req): void
+    {
         $get = function (string $k, float $def, float $lo, float $hi) use ($req): float {
             if (!isset($req[$k]) || $req[$k] === '') {
                 return $def;
@@ -139,7 +147,8 @@ final class Avatar {
         $this->camClassic = $mode === 'classic';
     }
 
-    function render(array $req): array {
+    function render(array $req): array
+    {
         $this->selectRenderer($req['renderer'] ?? $this->defaultRenderer);
         $this->selectCamera($req);
         if (isset($req['item'])) {
@@ -181,6 +190,22 @@ final class Avatar {
             throw new \InvalidArgumentException('Body colours need six colours, each written #rrggbb.');
         }
         $look = self::emptyLook();
+
+        $pose = $req['pose'] ?? 'standing';
+
+        $allowedPoses = [
+            'standing',
+            'overlord',
+            'walking',
+            'sitting'
+        ];
+
+        if (!in_array($pose, $allowedPoses, true)) {
+            throw new \InvalidArgumentException('Unknown pose.');
+        }
+
+        $look['pose'] = $pose;
+
         foreach (['head', 'torso', 'leftArm', 'rightArm', 'leftLeg', 'rightLeg'] as $j => $k) {
             $look['colors'][$k] = self::parseColor($cols[$j]);
         }
